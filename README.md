@@ -7,7 +7,7 @@ Graphite KDE Plasma 6 setup for Bazzite built around the Exsbe wallpapers and lo
 ```sh
 ./install.sh                 # everything (user level, no sudo)
 ./install.sh desktop layout  # or single sections
-sudo ./install-boot.sh       # Plymouth boot splash (build first: rpm/build.sh), then reboot
+sudo ./install-boot.sh       # boot splash + login screen (build first: rpm/build.sh), then reboot
 ./restore.sh                 # undo, from the backup taken before the first install
 ```
 

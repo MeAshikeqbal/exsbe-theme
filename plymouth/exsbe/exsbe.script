@@ -1,0 +1,19 @@
+Window.SetBackgroundTopColor(0.15, 0.15, 0.16);
+Window.SetBackgroundBottomColor(0.15, 0.15, 0.16);
+
+bg = Image("background.png");
+bg_sprite = Sprite(bg.Scale(Window.GetWidth(), Window.GetHeight()));
+bg_sprite.SetZ(-100);
+
+logo = Image("logo.png");
+logo_sprite = Sprite(logo);
+logo_sprite.SetX(Window.GetWidth() / 2 - logo.GetWidth() / 2);
+logo_sprite.SetY(Window.GetHeight() / 2 - logo.GetHeight() / 2);
+
+# gentle breathing pulse
+frame = 0;
+fun refresh_callback() {
+  frame++;
+  logo_sprite.SetOpacity(0.78 + 0.22 * Math.Sin(frame / 18));
+}
+Plymouth.SetRefreshFunction(refresh_callback);

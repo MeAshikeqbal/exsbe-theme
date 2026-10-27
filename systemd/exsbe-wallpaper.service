@@ -1,0 +1,6 @@
+[Unit]
+Description=Set time-of-day wallpaper
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/exsbe-wallpaper

@@ -13,8 +13,9 @@ sudo ./install-boot.sh       # Plymouth boot splash (build first: rpm/build.sh),
 
 Sections: `colors` `desktop` `apps` `containers` `splash` `workflow` `layout`.
 
-Wallpapers are expected in `~/Pictures/Wallpapers/exsbe/` (1-morning … 5-midnight) and the
-Plymouth sources in `~/exsbe-plymouth/exsbe/`.
+Everything is self-contained: the `splash` section copies the wallpapers to
+`~/Pictures/Wallpapers/exsbe/` (existing files are kept) and enables the time-of-day timer,
+and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 
 ## What's inside
 
@@ -29,6 +30,9 @@ Plymouth sources in `~/exsbe-plymouth/exsbe/`.
 | `kwin/exsbe-gamemode` | Play workspace: blur off, dock hidden, Do Not Disturb |
 | `look-and-feel/com.exsbe.desktop` | login splash + one-click global theme |
 | `konsole/`, `lazydocker/`, `bin/` | app themes and helper scripts |
+| `wallpapers/` | five time-of-day wallpapers (morning → midnight) |
+| `plymouth/exsbe` | Plymouth boot theme sources |
+| `systemd/` | wallpaper timer and the game-mode Do Not Disturb helper |
 | `rpm/` | Plymouth theme RPM spec and container build |
 
 ## Shortcuts

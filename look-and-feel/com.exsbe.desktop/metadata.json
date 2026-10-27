@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "",
+        "Description": "Graphite Exsbe look: color scheme, Breeze styling, WhiteSur icons and the Exsbe splash",
+        "Id": "com.exsbe.desktop",
+        "License": "MIT",
+        "Name": "Exsbe",
+        "Version": "1.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}

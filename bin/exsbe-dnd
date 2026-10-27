@@ -1,0 +1,14 @@
+#!/usr/bin/python3 -I
+"""Hold Plasma's Do Not Disturb while this process runs (game mode helper).
+
+Plasma drops an inhibition as soon as the DBus client that requested it
+disconnects, so stopping the service is all it takes to end it.
+"""
+from gi.repository import Gio, GLib
+
+bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+bus.call_sync("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+              "org.freedesktop.Notifications", "Inhibit",
+              GLib.Variant("(ssa{sv})", ("exsbe-gamemode", "Game mode (Play workspace)", {})),
+              None, Gio.DBusCallFlags.NONE, -1, None)
+GLib.MainLoop().run()

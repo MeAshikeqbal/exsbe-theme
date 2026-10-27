@@ -1,0 +1,15 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Exsbe"
+            }
+        ],
+        "Description": "Breeze with rounded dock items and desktop pager",
+        "Id": "exsbe",
+        "License": "MIT",
+        "Name": "Exsbe",
+        "Version": "1.0"
+    },
+    "X-Plasma-API": "5.0"
+}

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Pick an SSH host (from ~/.ssh/config and known_hosts) with fzf and connect.
+# Type anything not in the list (e.g. root@10.0.0.5) and press Enter to use it as-is.
+set -euo pipefail
+export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+hosts() {
+  awk 'tolower($1) == "host" { for (i = 2; i <= NF; i++) if ($i !~ /[*?!]/) print $i }' ~/.ssh/config 2>/dev/null
+  awk '$1 !~ /^\|/ { print $1 }' ~/.ssh/known_hosts 2>/dev/null | tr ',' '\n' | sed -E 's/^\[([^]]+)\]:[0-9]+$/\1/'
+}
+pick=$(hosts | sort -u | fzf --prompt 'ssh ❯ ' --height 100% --layout reverse --print-query \
+  --color 'bg:#232326,fg:#c8c8cc,hl:#8fa4c0,fg+:#f2f2f4,bg+:#2e2e32,hl+:#9fc0e6,prompt:#8fa4c0,pointer:#8fa4c0' |
+  tail -1) || exit 0
+[ -n "$pick" ] && exec ssh "$pick"

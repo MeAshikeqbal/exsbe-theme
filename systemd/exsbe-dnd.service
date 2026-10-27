@@ -1,0 +1,5 @@
+[Unit]
+Description=Exsbe game mode: hold Do Not Disturb
+
+[Service]
+ExecStart=%h/.local/bin/exsbe-dnd

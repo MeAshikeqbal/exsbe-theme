@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "System Information",
+        "Description": "Local Podman containers, pods and distroboxes at a glance",
+        "Icon": "package-x-generic",
+        "Id": "com.exsbe.containers",
+        "License": "MIT",
+        "Name": "Containers",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

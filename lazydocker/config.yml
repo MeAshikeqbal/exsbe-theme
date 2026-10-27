@@ -1,0 +1,15 @@
+# Exsbe palette for lazydocker
+gui:
+  theme:
+    activeBorderColor:
+      - "#8fa4c0"
+      - bold
+    inactiveBorderColor:
+      - "#5a5a62"
+    selectedLineBgColor:
+      - "#2e2e32"
+    optionsTextColor:
+      - "#7fa8d6"
+  returnImmediately: false
+  wrapMainPanel: true
+  sidePanelWidth: 0.3

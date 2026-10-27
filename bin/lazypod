@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# lazydocker against the rootless Podman socket.
+export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+exec lazydocker "$@"

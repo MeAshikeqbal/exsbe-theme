@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "Windows and Tasks",
+        "Description": "Workspace switcher: icon for each workspace, name on the current one",
+        "Icon": "virtual-desktops",
+        "Id": "com.exsbe.workspaces",
+        "License": "MIT",
+        "Name": "Workspaces",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

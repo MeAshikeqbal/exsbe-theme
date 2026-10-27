@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Set the wallpaper for the current time of day.
+dir="$HOME/Pictures/Wallpapers/exsbe"
+h=$((10#$(date +%H)))
+if   (( h >= 6  && h < 12 )); then f=1-morning
+elif (( h >= 12 && h < 17 )); then f=2-afternoon
+elif (( h >= 17 && h < 21 )); then f=3-evening
+elif (( h >= 21 ));           then f=4-night
+else                               f=5-midnight
+fi
+# lock screen follows the same image
+kwriteconfig6 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image \
+  --group General --key Image "file://$dir/$f.png"
+exec plasma-apply-wallpaperimage "$dir/$f.png"

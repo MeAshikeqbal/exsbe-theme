@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Description": "On the Play workspace: blur off, dock auto-hides, notifications held",
+        "Id": "exsbe-gamemode",
+        "License": "MIT",
+        "Name": "Exsbe game mode",
+        "Version": "1.0"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

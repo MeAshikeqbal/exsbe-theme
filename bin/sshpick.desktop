@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SSH to host
+Comment=Pick a host and connect in kitty
+Icon=network-connect
+Exec=@KITTY@ --title ssh @HOME@/.local/bin/sshpick
+Terminal=false
+Categories=Network;
+X-KDE-Shortcuts=Meta+Shift+H

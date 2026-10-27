@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Containers (lazydocker)
+Comment=Manage local Podman containers
+Icon=package-x-generic
+Exec=@KITTY@ --title lazydocker @HOME@/.local/bin/lazypod
+Terminal=false
+Categories=System;
+X-KDE-Shortcuts=Meta+Shift+C

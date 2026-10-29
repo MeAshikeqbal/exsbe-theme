@@ -21,12 +21,17 @@ GLYPH_COLOR = "#e6e6e8"
 APPS = {
     "globe-symbolic": (1.0, ["com.brave.Browser", "brave-browser", "brave"]),
     "utilities-terminal-symbolic": (1.0, ["kitty"]),
-    "code-context-symbolic": (1.3, ["code", "com.visualstudio.code", "visual-studio-code", "vscode"]),  # thin glyph
+    "code-context-symbolic": (1.0, ["code", "com.visualstudio.code", "visual-studio-code", "vscode"]),
     "folder-symbolic": (1.0, ["org.kde.dolphin", "system-file-manager", "dolphin"]),
 }
 
-# 16px symbolic glyphs drawn here (none of the installed themes has monochrome ones)
+# 16px symbolic glyphs drawn here: CPU / memory (no monochrome ones installed), a bold </> that
+# replaces Breeze's hairline code-context-symbolic (dock tile + Code workspace; without an exact
+# name the lookup would fall back to "code" and pick up the VS Code tile), and a Jellyfin-style mark
 SYMBOLIC = {
+    "code-context-symbolic": """<path d="M5 4.2 1.4 8 5 11.8M11 4.2 14.6 8 11 11.8M9.4 2.8 6.6 13.2" fill="none" stroke="#e6e6e8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>""",
+    "exsbe-jellyfin-symbolic": """<path d="M8 1.6c.5 0 .9.3 1.2.8l5.4 9.6c.5.9-.1 2-1.2 2H2.6c-1 0-1.7-1.1-1.2-2l5.4-9.6c.3-.5.7-.8 1.2-.8z" fill="none" stroke="#e6e6e8" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M8 6.2c.2 0 .4.1.5.3l2.2 3.9c.2.4 0 .8-.5.8H5.8c-.5 0-.7-.4-.5-.8l2.2-3.9c.1-.2.3-.3.5-.3z" fill="#e6e6e8"/>""",
     "exsbe-cpu-symbolic": """<rect x="4" y="4" width="8" height="8" rx="1.5" fill="none" stroke="#e6e6e8" stroke-width="1.5"/>
 <rect x="6.5" y="6.5" width="3" height="3" rx="0.5" fill="#e6e6e8"/>
 <path d="M6 1v2.2M10 1v2.2M6 12.8V15M10 12.8V15M1 6h2.2M1 10h2.2M12.8 6H15M12.8 10H15" stroke="#e6e6e8" stroke-width="1.4" stroke-linecap="round"/>""",
@@ -54,6 +59,8 @@ TILE = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox
 
 
 def find(name):
+    if name in SYMBOLIC:  # our own glyph wins over the installed themes
+        return name
     for base in SEARCH:
         hits = sorted(p for p in base.rglob(f"{name}.svg") if "@" not in str(p))
         if hits:
@@ -64,6 +71,8 @@ def find(name):
 
 def glyph(path):
     """Inner shapes of a symbolic icon, recoloured, plus its viewBox size."""
+    if isinstance(path, str):
+        return SYMBOLIC[path], 16.0
     svg = path.read_text()
     vb = re.search(r'viewBox="([\d.\s-]+)"', svg)
     if vb:
@@ -82,7 +91,7 @@ def glyph(path):
 def main():
     out = Path(sys.argv[1]) / "apps/scalable"
     out.mkdir(parents=True, exist_ok=True)
-    box = 30  # glyph size on the 64px tile
+    box = 34  # glyph size on the 64px tile
     for name, (scale, targets) in APPS.items():
         inner, size = glyph(find(name))
         b = box * scale

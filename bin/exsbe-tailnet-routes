@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Use the Lab subnet route (tailscale-router, CT 112) only when away from home.
-# At home the LAN is reached directly; elsewhere `tailscale set --accept-routes=true` sends
-# 192.0.2.0/24 through the tailnet. "Home" = the default gateway has the MAC in
+# tailscale-router advertises just the reverse proxy, 192.0.2.101/32 (npmplus): advertising
+# the whole /24 pulled LAN traffic of other tailnet members on the LAN (frigate, producr) into
+# Tailscale. At home the proxy is reached directly; elsewhere accept-routes sends it through
+# the tailnet. "Home" = the default gateway has the MAC in
 # ~/.config/exsbe/pve.conf (home_gateway = ...), so other 192.0.2.x networks don't count.
 # Re-checks on every route/address change and once a minute. Needs `tailscale set --operator=$USER`.
 set -uo pipefail

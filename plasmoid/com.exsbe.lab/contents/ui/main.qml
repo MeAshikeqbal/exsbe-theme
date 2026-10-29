@@ -46,6 +46,13 @@ PlasmoidItem {
         if (!s.quorate) list.push("Cluster has lost quorum")
         for (const st of s.storage) if (st.used / st.total >= warn) list.push(st.name + " is " + pct(st.used / st.total) + " full")
         for (const b of s.backup.failed) list.push("Backup " + (b.id || "job") + " on " + b.node + " failed")
+        const pbs = s.pbs
+        if (pbs && pbs.error) list.push("Backup server unreachable")
+        else if (pbs) {
+            for (const st of pbs.stores) if (st.total && st.used / st.total >= warn) list.push("PBS " + st.name + " is " + pct(st.used / st.total) + " full")
+            for (const j of pbs.jobs) if (j.state && j.state.toLowerCase() !== "ok") list.push("PBS " + j.kind + " job " + j.id + " failed")
+            for (const t of pbs.failed) list.push("PBS " + t.type + " " + t.id + " failed")
+        }
         issues = list
         s.guests = s.guests.filter(g => !g.template)
         snap = s
@@ -243,6 +250,23 @@ PlasmoidItem {
                         : root.snap.backup.failed.length > 0 ? root.snap.backup.failed.length + " backup(s) failed in the last 24 h"
                         : root.snap.backup.last ? "Last backup " + root.dur(Date.now() / 1000 - root.snap.backup.last) + " ago · " + root.snap.backup.lastStatus
                         : "No backup runs found"
+                }
+            }
+            RowLayout {
+                visible: !!(root.snap && root.snap.pbs && !root.snap.pbs.error && root.snap.pbs.jobs.length)
+                Kirigami.Icon {
+                    source: "server-database"
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                }
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    opacity: 0.8
+                    elide: Text.ElideRight
+                    // e.g. "PBS  verify ok 3 h ago · prune ok 1 d ago"
+                    text: !(root.snap && root.snap.pbs && root.snap.pbs.jobs) ? ""
+                        : "PBS  " + root.snap.pbs.jobs.map(j => j.kind + " " + (j.state || "pending")
+                            + (j.end ? " " + root.dur(Date.now() / 1000 - j.end) + " ago" : "")).join(" · ")
                 }
             }
 

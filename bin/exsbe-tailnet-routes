@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Use the Lab subnet route (tailscale-router, CT 112) only when away from home.
+# At home the LAN is reached directly; elsewhere `tailscale set --accept-routes=true` sends
+# 192.0.2.0/24 through the tailnet. "Home" = the default gateway has the MAC in
+# ~/.config/exsbe/pve.conf (home_gateway = ...), so other 192.0.2.x networks don't count.
+# Re-checks on every route/address change and once a minute. Needs `tailscale set --operator=$USER`.
+set -uo pipefail
+mac=$(awk -F' *= *' '$1 == "home_gateway" { print tolower($2) }' ~/.config/exsbe/pve.conf 2>/dev/null)
+[ -n "$mac" ] || { echo "no home_gateway in ~/.config/exsbe/pve.conf" >&2; exit 1; }
+last=""
+
+check() {
+  local gw home=false want
+  gw=$(ip -4 route show default | awk '{ print $3; exit }')
+  if [ -n "$gw" ]; then
+    ping -c1 -W1 "$gw" >/dev/null 2>&1   # refresh the neighbour entry
+    ip neigh show "$gw" | grep -qi "lladdr $mac" && home=true
+  fi
+  want=$([ "$home" = true ] && echo false || echo true)
+  if [ "$want" != "$last" ] && tailscale set --accept-routes="$want"; then
+    last=$want
+    echo "home=$home -> accept-routes=$want"
+  fi
+}
+
+check
+ip monitor route address | while true; do
+  # wake on a change (draining the burst that follows) or after a minute
+  if read -r -t 60 _; then while read -r -t 2 _; do :; done; fi
+  check
+done

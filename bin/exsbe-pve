@@ -11,6 +11,8 @@
 
 Endpoints are tried in order from ~/.config/exsbe/pve.conf; the one that answered is
 remembered. IP endpoints are verified against the cluster CA (exsbe-pve-setup saves it).
+With `pbs = URL` in pve.conf and a PBS token (exsbe-pve-setup --pbs), status also covers
+Proxmox Backup Server: datastores, garbage collection, verify/prune/sync jobs, failed tasks.
 """
 import json, os, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -35,12 +37,47 @@ def conf():
     return c
 
 
-def token():
-    r = subprocess.run(["secret-tool", "lookup", "service", "exsbe-pve", "account", TOKEN_ID],
+def secret(account):
+    r = subprocess.run(["secret-tool", "lookup", "service", "exsbe-pve", "account", account],
                        capture_output=True, text=True)
-    if r.returncode or not r.stdout:
-        sys.exit("no Proxmox token in KWallet; run exsbe-pve-setup root@NODE")
     return r.stdout.strip()
+
+
+def token():
+    return secret(TOKEN_ID) or sys.exit("no Proxmox token in KWallet; run exsbe-pve-setup root@NODE")
+
+
+def pbs_snapshot():
+    """PBS health, or None when not configured / no token; {"error": ...} when unreachable."""
+    url, tok = conf().get("pbs"), secret("exsbe@pbs!desktop")
+    if not url or not tok:
+        return None
+
+    def get(path):
+        req = urllib.request.Request(url.rstrip("/") + "/api2/json" + path,
+                                     headers={"Authorization": f"PBSAPIToken=exsbe@pbs!desktop:{tok}"})
+        with urllib.request.urlopen(req, timeout=6, context=ssl.create_default_context()) as r:
+            return json.load(r)["data"]
+
+    try:
+        stores = [{"name": d["store"], "used": d.get("used", 0), "total": d.get("total", 0)}
+                  for d in get("/status/datastore-usage")]
+        jobs = []
+        for kind in ("verify", "prune", "sync"):
+            try:
+                for j in get(f"/admin/{kind}"):
+                    jobs.append({"kind": kind, "id": j.get("id", ""), "store": j.get("store", ""),
+                                 "state": j.get("last-run-state", ""), "end": j.get("last-run-endtime", 0),
+                                 "next": j.get("next-run", 0)})
+            except urllib.error.HTTPError:
+                pass  # job type not configured / not permitted
+        failed = [{"upid": t["upid"], "type": t.get("worker_type", ""), "id": t.get("worker_id", ""),
+                   "status": t.get("status", ""), "end": t.get("endtime", 0)}
+                  for t in get(f"/nodes/localhost/tasks?errors=1&since={int(time.time()) - 86400}&limit=50")
+                  if t.get("endtime") and t.get("status") not in ("OK", None)]
+        return {"url": url, "stores": stores, "jobs": jobs, "failed": failed}
+    except (OSError, ValueError, KeyError) as e:
+        return {"url": url, "error": str(e)}
 
 
 class Api:
@@ -115,7 +152,7 @@ def snapshot(api):
     backups = sorted((t for t in tasks if t.get("type") == "vzdump" and t.get("endtime")),
                      key=lambda t: t["endtime"], reverse=True)
     failed = [t for t in backups if t.get("status") != "OK" and t["endtime"] > time.time() - 86400]
-    return {"cluster": cluster.get("name", ""), "quorate": bool(cluster.get("quorate", 1)),
+    return {"pbs": pbs_snapshot(),"cluster": cluster.get("name", ""), "quorate": bool(cluster.get("quorate", 1)),
             "endpoint": api.base, "nodes": nodes, "guests": guests, "storage": storage,
             "backup": {"last": backups[0]["endtime"] if backups else 0,
                        "lastStatus": backups[0].get("status") if backups else "",
@@ -190,6 +227,13 @@ def cmd_alerts(api):
     for st in s["storage"]:
         if st["total"] and st["used"] / st["total"] >= STORAGE_WARN:
             now[f'storage:{st["name"]}'] = (f'Storage {st["name"]} is {st["used"] / st["total"]:.0%} full', "normal")
+    pbs = s.get("pbs") or {}
+    for st in pbs.get("stores", []):
+        if st["total"] and st["used"] / st["total"] >= STORAGE_WARN:
+            now[f'pbs:{st["name"]}'] = (f'PBS datastore {st["name"]} is {st["used"] / st["total"]:.0%} full', "normal")
+    for j in pbs.get("jobs", []):
+        if j["state"] and j["state"].lower() != "ok":
+            now[f'pbsjob:{j["kind"]}:{j["id"]}'] = (f'PBS {j["kind"]} job {j["id"]} failed: {j["state"]}', "critical")
     for key, (msg, urg) in now.items():
         if key not in state["active"]:
             notify("Lab", msg, urg, "dialog-warning")
@@ -197,6 +241,10 @@ def cmd_alerts(api):
         if key not in now:
             notify("Lab", f"Resolved: {msg}", "low", "dialog-ok")
     seen = set(state["seenBackups"])
+    for t in pbs.get("failed", []):
+        if t["upid"] not in seen and state.get("initialized"):
+            notify("Lab PBS task failed", f'{t["type"]} {t["id"]}: {t["status"]}', "critical", "dialog-error")
+        seen.add(t["upid"])
     for b in s["backup"]["failed"]:
         if b["upid"] not in seen and state.get("initialized"):
             notify("Lab backup failed", f'{b["id"] or "job"} on {b["node"]}: {b["status"]}', "critical", "dialog-error")

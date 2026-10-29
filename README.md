@@ -7,7 +7,8 @@ Graphite KDE Plasma 6 setup for Bazzite built around the Exsbe wallpapers and lo
 ```sh
 ./install.sh                 # everything (user level, no sudo)
 ./install.sh desktop layout  # or single sections
-bin/exsbe-pve-setup root@192.0.2.10   # once, before the lab section (Proxmox tokens)
+bin/exsbe-pve-setup root@192.0.2.10 --pbs root@203.0.113.10   # once, before the lab section
+bin/exsbe-secret jellyfin    # once: Jellyfin API key (Dashboard → API Keys)
 sudo ./install-boot.sh       # boot splash + login screen (build first: rpm/build.sh), then reboot
 ./restore.sh                 # undo, from the backup taken before the first install
 ```
@@ -32,7 +33,10 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `plasmoid/com.exsbe.proxmox` | Proxmox panel widget: nodes, storage, backups, guests (start / shut down / console / ssh) |
 | `bin/exsbe-pve`, `bin/pvepick` | Proxmox CLI (status, actions, consoles, ssh-config, alerts) and the fzf guest picker |
 | `bin/exsbe-pve-setup` | one-time: least-privilege Proxmox users + API tokens, secrets straight into KWallet |
-| `lab/pve.conf` | cluster endpoints, tried in order (LAN name, then node IPs) |
+| `lab/pve.conf` | cluster endpoints (LAN name, then node IPs), PBS URL, home router MAC |
+| `bin/exsbe-jellyfin-mpris` | Jellyfin "now playing" (any device) in Plasma's media controls and lock screen |
+| `bin/exsbe-tailnet-routes` | uses the `tailscale-router` Tailscale subnet route (CT 112) only when away from home |
+| `bin/exsbe-secret` | store an API key in KWallet without echo (`exsbe-secret jellyfin`) |
 | `kwin/exsbe-gamemode` | Play workspace: blur off, dock hidden, Do Not Disturb |
 | `look-and-feel/com.exsbe.desktop` | login splash + one-click global theme |
 | `konsole/`, `kitty/`, `btop/`, `lazygit/`, `lazydocker/`, `bin/` | app themes and helper scripts |

@@ -1,12 +1,30 @@
 #!/usr/bin/env bash
-# One-time Proxmox setup for the Lab tools, over root SSH to any cluster node:
-# least-privilege users, roles and API tokens, with the token secrets piped straight into
-# KWallet (Secret Service) - they are never printed or written to disk.
+# One-time setup for the Lab tools, over root SSH: least-privilege users and API tokens on the
+# Proxmox cluster (and, with --pbs, a read-only token on Proxmox Backup Server). Token secrets are
+# piped straight into KWallet (Secret Service) - never printed or written to disk.
 # Re-running is safe: roles are refreshed, existing tokens are kept.
-# Usage: exsbe-pve-setup root@NODE
+# Usage: exsbe-pve-setup root@NODE [--pbs root@PBS]
 set -euo pipefail
-node=${1:?usage: exsbe-pve-setup root@NODE}
+node=${1:?usage: exsbe-pve-setup root@NODE [--pbs root@PBS]}
+pbs_host=""
+[ "${2:-}" = "--pbs" ] && pbs_host=${3:?--pbs needs root@PBS}
 pve() { ssh -o BatchMode=yes "$node" "$@"; }
+pbs() { ssh -o BatchMode=yes "$pbs_host" "$@"; }
+
+# store ID LABEL  <secret on stdin>; refuses anything that is not a token secret (a UUID)
+store() {
+  python3 -c '
+import json, re, sys
+d = sys.stdin.read()
+m = re.search(r"\{.*\}", d, re.S)
+v = json.loads(m.group(0)).get("value", "") if m else ""
+if not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", v):
+    sys.exit("token output not understood; nothing stored")
+sys.stdout.write(v)' | secret-tool store --label="$2" service exsbe-pve account "$1"
+  echo "stored $1 in KWallet"
+}
+# have ID: a non-empty secret is already in KWallet
+have() { [ -n "$(secret-tool lookup service exsbe-pve account "$1" 2>/dev/null)" ]; }
 
 # user ROLE PRIVS COMMENT  ->  user@pve with ROLE on /
 user() {
@@ -17,11 +35,9 @@ user() {
 # token USER NAME  ->  KWallet item service=exsbe-pve account=USER@pve!NAME
 token() {
   local id="$1@pve!$2"
-  secret-tool lookup service exsbe-pve account "$id" >/dev/null && return
+  have "$id" && return
   pve "pveum user token remove $1@pve $2 2>/dev/null; pveum user token add $1@pve $2 --privsep 0 --output-format json" |
-    python3 -c 'import json,sys; sys.stdout.write(json.load(sys.stdin)["value"])' |
-    secret-tool store --label="Proxmox API token $id" service exsbe-pve account "$id"
-  echo "stored $id in KWallet"
+    store "$id" "Proxmox API token $id"
 }
 
 # desktop panel, picker, alerts, ssh config: see everything, power/console guests, change nothing
@@ -39,4 +55,18 @@ token terraform tf
 # cluster CA, so nodes can be reached by IP with verified TLS when the proxy name is unavailable
 mkdir -p ~/.config/exsbe
 pve cat /etc/pve/pve-root-ca.pem > ~/.config/exsbe/pve-root-ca.pem
+
+# PBS: read-only (Audit on /) for datastore, garbage collection, verify and task status.
+# A PBS token needs its own ACL on top of its user's.
+if [ -n "$pbs_host" ]; then
+  id='exsbe@pbs!desktop'
+  pbs "proxmox-backup-manager user create exsbe@pbs --comment 'Exsbe desktop (read-only)' 2>/dev/null || true
+       proxmox-backup-manager acl update / Audit --auth-id exsbe@pbs"
+  if ! have "$id"; then
+    secret-tool clear service exsbe-pve account "$id" 2>/dev/null || true
+    pbs "proxmox-backup-manager user delete-token exsbe@pbs desktop >/dev/null 2>&1; proxmox-backup-manager user generate-token exsbe@pbs desktop" |
+      store "$id" "PBS API token $id"
+  fi
+  pbs "proxmox-backup-manager acl update / Audit --auth-id '$id'"
+fi
 echo "done"

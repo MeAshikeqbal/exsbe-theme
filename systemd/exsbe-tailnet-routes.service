@@ -1,0 +1,11 @@
+[Unit]
+Description=Accept the Lab Tailscale route only when away from home
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/exsbe-tailnet-routes
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

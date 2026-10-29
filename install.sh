@@ -293,10 +293,13 @@ polish() {
 
 lab() {
   # Lab Proxmox: CLI, guest picker (Meta+Shift+P), panel widget, alerts + SSH config timer.
-  # One-time token setup (needs root SSH to a node): bin/exsbe-pve-setup root@192.0.2.10
+  # One-time token setup (root SSH): bin/exsbe-pve-setup root@192.0.2.10 --pbs root@203.0.113.10
   install -Dm755 "$HERE/bin/exsbe-pve" ~/.local/bin/exsbe-pve
   install -Dm755 "$HERE/bin/exsbe-pve-setup" ~/.local/bin/exsbe-pve-setup
   install -Dm755 "$HERE/bin/pvepick" ~/.local/bin/pvepick
+  install -Dm755 "$HERE/bin/exsbe-secret" ~/.local/bin/exsbe-secret
+  install -Dm755 "$HERE/bin/exsbe-jellyfin-mpris" ~/.local/bin/exsbe-jellyfin-mpris
+  install -Dm755 "$HERE/bin/exsbe-tailnet-routes" ~/.local/bin/exsbe-tailnet-routes
   [ -f ~/.config/exsbe/pve.conf ] || install -Dm644 "$HERE/lab/pve.conf" ~/.config/exsbe/pve.conf
   local kitty d; kitty="$(command -v kitty || echo /home/linuxbrew/.linuxbrew/bin/kitty)"
   for d in pvepick proxmox; do
@@ -314,6 +317,16 @@ lab() {
   install -Dm644 "$HERE/systemd/exsbe-pve.timer" ~/.config/systemd/user/exsbe-pve.timer
   systemctl --user daemon-reload
   systemctl --user enable --now exsbe-pve.timer
+
+  # Tailscale: accept the tailscale-router subnet route only when away from home
+  install -Dm644 "$HERE/systemd/exsbe-tailnet-routes.service" ~/.config/systemd/user/exsbe-tailnet-routes.service
+  # Jellyfin now playing in the media controls (API key: exsbe-secret jellyfin)
+  install -Dm644 "$HERE/systemd/exsbe-jellyfin-mpris.service" ~/.config/systemd/user/exsbe-jellyfin-mpris.service
+  systemctl --user daemon-reload
+  systemctl --user enable --now exsbe-tailnet-routes.service
+  if [ -n "$(secret-tool lookup service exsbe-pve account jellyfin 2>/dev/null)" ]; then
+    systemctl --user enable --now exsbe-jellyfin-mpris.service
+  fi
 
   # panel widget, right after the containers widget on the top bar
   # (Plasma rewrites the order when a widget is added, so place it in a second pass)

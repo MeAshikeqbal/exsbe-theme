@@ -376,12 +376,14 @@ def fzf_info(api, vmid):
         print(f"\n   {DIM}notes{RST}")
         for l in notes[:6]:
             print(f"   {FG}{l[:70]}{RST}")
-    hint = (f"ssh {g['name']}" if g["name"] in ssh_hosts() else "console (pct enter)" if ct else "console (noVNC)") if on else "start it"
+    hint = ("console (pct enter)" if ct else f"ssh {g['name']}" if g["name"] in ssh_hosts() else "console (noVNC)") if on else "start it"
     print(f"\n   {FAINT}⏎ {hint}{RST}")
 
 
 def connect(api, vmid):
-    """Enter in the picker: ssh when possible, else the console; a stopped guest offers to start."""
+    """Enter in the picker. Containers: `pct enter` through their node (needs no sshd or key
+    inside). VMs: ssh when they have an IP, else the noVNC console. A stopped guest offers to
+    start. Runs in the picker's terminal and returns to the list when the session ends."""
     g = find(api, vmid)
     if g["status"] != "running":
         if input(f"\n  {g['name']} is {g['status']}. Start it? [y/N] ").strip().lower() != "y":
@@ -394,14 +396,20 @@ def connect(api, vmid):
             if find(api, vmid)["status"] == "running":
                 break
         print()
-        time.sleep(3)  # let sshd come up
-    if g["name"] in ssh_hosts():
-        os.execvp("ssh", ["ssh", g["name"]])
+        time.sleep(3)  # let the guest finish booting
     if g["type"] == "lxc":
         node_ip = next(n["ip"] for n in snapshot(api)["nodes"] if n["name"] == g["node"])
-        os.execvp("ssh", ["ssh", "-t", f"root@{node_ip}", "pct", "enter", str(g["vmid"])])
-    app_window(f'{conf()["web"]}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
-    print(f"  {g['name']} has no IP for ssh; opened its console in a window")
+        how, cmd = f"pct enter on {g['node']}", ["ssh", "-t", f"root@{node_ip}", "pct", "enter", str(g["vmid"])]
+    elif g["name"] in ssh_hosts():
+        how, cmd = "ssh", ["ssh", g["name"]]
+    else:
+        app_window(f'{conf()["web"]}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
+        input(f"\n  {g['name']} has no IP for ssh; opened its console in a window. Enter to go back ")
+        return
+    print(f"\n  {ACCENT}→ {g['name']}{RST} {DIM}({how}) · exit to return to the list{RST}\n", flush=True)
+    rc = subprocess.call(cmd)
+    if rc == 255:  # ssh itself failed (refused, host key, auth): keep the error on screen
+        input(f"\n  {RED}could not connect to {g['name']}{RST}. Enter to go back ")
 
 
 def confirm(api, vmid, action):

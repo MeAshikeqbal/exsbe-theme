@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Lab guest picker (Meta+Shift+P): fzf over every Proxmox VM and container, with a live
-# details pane. Enter connects (ssh, else the console; offers to start a stopped guest).
+# details pane. Enter opens a shell: containers via pct enter, VMs via ssh (else the noVNC
+# console); a stopped guest is offered a start. Exit the shell to come back to the list.
 # Ctrl+O console · Ctrl+W web UI · Ctrl+S start · Ctrl+X shut down · Ctrl+R reboot
 # (shut down / reboot ask first) · Ctrl+L refresh. The list refreshes after every action.
 set -euo pipefail
@@ -15,7 +16,7 @@ exec fzf --ansi --delimiter '\t' --with-nth 4 --header-lines 1 \
   --list-label ' guests ' --input-label ' search ' --preview-label ' details ' \
   --preview 'exsbe-pve info {1}' --preview-window 'right,48%,wrap,<60(down,40%,wrap)' \
   --footer '⏎ connect  ^o console  ^w web  ^s start  ^x shut down  ^r reboot  ^l refresh' \
-  --bind 'enter:become(exsbe-pve connect {1})' \
+  --bind "enter:execute(exsbe-pve connect {1})+reload($rows)+refresh-preview" \
   --bind "ctrl-s:$(act start)" --bind "ctrl-x:$(act shutdown)" --bind "ctrl-r:$(act reboot)" \
   --bind "ctrl-l:reload($rows)+refresh-preview" \
   --bind 'ctrl-o:execute-silent(systemd-run --user --scope --quiet --collect setsid -f exsbe-pve console {1} >/dev/null 2>&1)' \

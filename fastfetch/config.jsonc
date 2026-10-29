@@ -1,0 +1,32 @@
+// Exsbe fastfetch: logo through the kitty graphics protocol, graphite keys
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "type": "kitty-direct",
+    "source": "~/.local/share/exsbe/exsbe.png",
+    "width": 16,
+    "height": 8,
+    "padding": { "top": 1, "left": 2, "right": 4 }
+  },
+  "display": {
+    "separator": "  ",
+    "color": { "keys": "38;2;143;164;192", "title": "38;2;230;230;232" },
+    "key": { "width": 9 }
+  },
+  "modules": [
+    "break",
+    { "type": "title", "format": "{user-name}@{host-name}" },
+    { "type": "custom", "format": "\u001b[38;2;58;58;63m────────────────────────────" },
+    { "type": "os", "key": "os", "format": "{pretty-name}" },
+    { "type": "kernel", "key": "kernel", "format": "{release}" },
+    { "type": "de", "key": "desktop" },
+    { "type": "uptime", "key": "uptime" },
+    { "type": "packages", "key": "packages" },
+    { "type": "cpu", "key": "cpu", "format": "{name}" },
+    { "type": "gpu", "key": "gpu", "format": "{name}" },
+    { "type": "memory", "key": "memory" },
+    { "type": "disk", "key": "disk", "folders": "/var/home" },
+    "break",
+    { "type": "colors", "symbol": "circle", "paddingLeft": 9 }
+  ]
+}

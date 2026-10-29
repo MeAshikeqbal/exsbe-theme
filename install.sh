@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exsbe desktop theme installer (user level, no sudo).
-# Usage: ./install.sh [section...]   sections: colors desktop apps containers splash layout
+# Usage: ./install.sh [section...]   sections: colors desktop apps containers splash workflow polish lab layout
 # With no arguments every section runs in order.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -30,14 +30,30 @@ desktop() {
   rm -rf ~/.local/share/plasma/desktoptheme/exsbe
   cp -r "$HERE/plasma-style/exsbe" ~/.local/share/plasma/desktoptheme/exsbe
   plasma-apply-desktoptheme exsbe
-  kw --file kdeglobals --group Icons --key Theme WhiteSur-dark
+  # icons: WhiteSur-dark with graphite folders
+  if [ -d ~/.local/share/icons/WhiteSur-dark ]; then
+    "$HERE/icons/gen-folders.sh"
+    kw --file kdeglobals --group Icons --key Theme Exsbe
+  else
+    kw --file kdeglobals --group Icons --key Theme WhiteSur-dark
+  fi
   plasma-apply-cursortheme WhiteSur-cursors || true
 
-  # window decoration: Exsbe Aurorae (rounded graphite frame), buttons on the right
+  # window decoration: Breeze, which (unlike Aurorae) tells KWin its corner radius,
+  # so window contents get rounded corners too; colours come from the Exsbe scheme.
+  # The Exsbe Aurorae theme stays installed: pick it in System Settings to go back.
   rm -rf ~/.local/share/aurorae/themes/Exsbe
   cp -r "$HERE/aurorae/Exsbe" ~/.local/share/aurorae/themes/Exsbe
-  kw --file kwinrc --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae.v2
-  kw --file kwinrc --group org.kde.kdecoration2 --key theme __aurorae__svg__Exsbe
+  kw --file kwinrc --group org.kde.kdecoration2 --key library org.kde.breeze
+  kw --file kwinrc --group org.kde.kdecoration2 --key theme Breeze
+  kw --file breezerc --group Common --key RoundedCorners true
+  kw --file breezerc --group Common --key OutlineIntensity OutlineLow
+  kw --file breezerc --group Common --key ShadowSize ShadowLarge
+  kw --file breezerc --group Common --key ShadowStrength 160
+  kw --file breezerc --group Windeco --key TitleAlignment AlignCenterFullWidth
+  kw --file breezerc --group Windeco --key ButtonSize ButtonDefault
+  kw --file breezerc --group Windeco --key DrawBackgroundGradient false
+  kw --file breezerc --group Windeco --key OutlineCloseButton false
   kw --file kwinrc --group org.kde.kdecoration2 --key BorderSize Normal
   kw --file kwinrc --group org.kde.kdecoration2 --key BorderSizeAuto false
   kw --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnLeft ""
@@ -94,6 +110,29 @@ apps() {
       -e 's/"bold yellow"/"#e0c47a"/g' -e 's/(bold yellow)/(#e0c47a)/g' \
       -e 's/(bold green)/(bold #8fc79a)/g' -e 's/(bold red)/(bold #e07a7a)/g' \
       -e 's/"bold blue"/"#7fa8d6"/' "$st"
+  fi
+
+  # kitty: palette + rounded tabs, included from the user's kitty.conf
+  install -Dm644 "$HERE/kitty/exsbe.conf" ~/.config/kitty/exsbe.conf
+  touch ~/.config/kitty/kitty.conf
+  grep -qx 'include exsbe.conf' ~/.config/kitty/kitty.conf || echo 'include exsbe.conf' >> ~/.config/kitty/kitty.conf
+  pkill -USR1 -x kitty || true   # live reload
+
+  # CLI colours (fzf, bat, eza, zsh highlighting) + fastfetch greeting, sourced from .zshrc
+  install -Dm644 "$HERE/shell/exsbe.zsh" ~/.config/exsbe/exsbe.zsh
+  grep -q 'exsbe/exsbe.zsh' ~/.zshrc 2>/dev/null ||
+    printf '\n# Exsbe palette for CLI tools\nsource ~/.config/exsbe/exsbe.zsh\n' >> ~/.zshrc
+  install -Dm644 "$HERE/icons/exsbe.png" ~/.local/share/exsbe/exsbe.png
+  install -Dm644 "$HERE/fastfetch/config.jsonc" ~/.config/fastfetch/config.jsonc
+  install -Dm644 "$HERE/lazygit/config.yml" ~/.config/lazygit/config.yml
+
+  # btop
+  install -Dm644 "$HERE/btop/exsbe.theme" ~/.config/btop/themes/exsbe.theme
+  if [ -f ~/.config/btop/btop.conf ]; then
+    sed -i -e 's|^color_theme = .*|color_theme = "exsbe"|' -e 's|^theme_background = .*|theme_background = false|' \
+      ~/.config/btop/btop.conf
+  else
+    printf 'color_theme = "exsbe"\ntheme_background = false\n' > ~/.config/btop/btop.conf
   fi
 }
 
@@ -166,6 +205,7 @@ workflow() {
   }
   rule code "VS Code on Code" '(?i)^code$' Code
   rule web "Brave on Web" '(?i)^(brave-browser|com\.brave\.browser)$' Web
+  rule lab "Proxmox, Termius, Moonlight on Lab" '(?i)^(brave-pve\.local\.lab\.site__-default|com\.termius\.termius|termius.*|com\.moonlight_stream\.moonlight|moonlight)$' Lab
   rule play "Games on Play" '(?i)^(steam|steam_app_.*|steamwebhelper|lutris|net\.lutris\.lutris|heroic|com\.heroicgameslauncher\.hgl|gamescope)$' Play
   local existing; existing="$(kreadconfig6 --file kwinrulesrc --group General --key rules | tr ',' '\n' | grep -v '^exsbe-' | grep -v '^$' || true)"
   local all; all="$(printf '%s\n' $existing "${rules[@]}" | paste -sd,)"
@@ -217,8 +257,100 @@ workflow() {
   qdbus_reconfigure
 }
 
+polish() {
+  # animations: a bit quicker; windows scale in/out, minimize into the dock like a genie
+  kw --file kdeglobals --group KDE --key AnimationDurationFactor 0.7
+  kw --file kwinrc --group Plugins --key scaleEnabled true
+  kw --file kwinrc --group Plugins --key glideEnabled false
+  kw --file kwinrc --group Plugins --key fadeEnabled false
+  kw --file kwinrc --group Plugins --key magiclampEnabled true
+  kw --file kwinrc --group Plugins --key squashEnabled false
+  # tapping Meta opens Overview (the app launcher stays on Alt+F1)
+  kw --file kwinrc --group ModifierOnlyShortcuts --key Meta \
+    "org.kde.kglobalaccel,/component/kwin,org.kde.kglobalaccel.Component,invokeShortcut,Overview"
+  # KRunner (Alt+Space) floats in the middle of the screen instead of dropping from the top
+  kw --file krunnerrc --group General --key FreeFloating true
+
+  # notifications: top right under the bar, 5 s, quiet while gaming / sharing the screen
+  kw --file plasmanotifyrc --group Notifications --key PopupPosition TopRight
+  kw --file plasmanotifyrc --group Notifications --key PopupTimeout 5000
+  kw --file plasmanotifyrc --group Notifications --key LowPriorityHistory false
+  kw --file plasmanotifyrc --group Notifications --key CriticalInDndMode true
+  kw --file plasmanotifyrc --group DoNotDisturb --key WhenFullscreen true
+  kw --file plasmanotifyrc --group DoNotDisturb --key WhenScreenSharing true
+  kw --file plasmanotifyrc --group DoNotDisturb --key WhenScreensMirrored true
+
+  # sound theme: soft Exsbe chimes (falls back to Ocean for anything not covered)
+  rm -rf ~/.local/share/sounds/exsbe
+  mkdir -p ~/.local/share/sounds
+  cp -r "$HERE/sounds/exsbe" ~/.local/share/sounds/exsbe
+  kw --file kdeglobals --group Sounds --key Theme exsbe
+  kw --file kdeglobals --group Sounds --key Enable true
+  gsettings set org.gnome.desktop.sound theme-name exsbe || true
+
+  qdbus_reconfigure
+}
+
+lab() {
+  # Lab Proxmox: CLI, guest picker (Meta+Shift+P), panel widget, alerts + SSH config timer.
+  # One-time token setup (needs root SSH to a node): bin/exsbe-pve-setup root@192.0.2.10
+  install -Dm755 "$HERE/bin/exsbe-pve" ~/.local/bin/exsbe-pve
+  install -Dm755 "$HERE/bin/exsbe-pve-setup" ~/.local/bin/exsbe-pve-setup
+  install -Dm755 "$HERE/bin/pvepick" ~/.local/bin/pvepick
+  [ -f ~/.config/exsbe/pve.conf ] || install -Dm644 "$HERE/lab/pve.conf" ~/.config/exsbe/pve.conf
+  local kitty d; kitty="$(command -v kitty || echo /home/linuxbrew/.linuxbrew/bin/kitty)"
+  for d in pvepick proxmox; do
+    sed -e "s|@KITTY@|$kitty|" -e "s|@HOME@|$HOME|" "$HERE/bin/$d.desktop" > ~/.local/share/applications/$d.desktop
+  done
+  kw --file kglobalshortcutsrc --group services --group pvepick.desktop --key _launch "Meta+Shift+P"
+  update-desktop-database ~/.local/share/applications 2>/dev/null || true
+
+  # generated Host entries for every node and guest
+  mkdir -p -m700 ~/.ssh/config.d
+  touch ~/.ssh/config
+  grep -qx 'Include config.d/\*' ~/.ssh/config || sed -i '1i Include config.d/*\n' ~/.ssh/config
+
+  install -Dm644 "$HERE/systemd/exsbe-pve.service" ~/.config/systemd/user/exsbe-pve.service
+  install -Dm644 "$HERE/systemd/exsbe-pve.timer" ~/.config/systemd/user/exsbe-pve.timer
+  systemctl --user daemon-reload
+  systemctl --user enable --now exsbe-pve.timer
+
+  # panel widget, right after the containers widget on the top bar
+  # (Plasma rewrites the order when a widget is added, so place it in a second pass)
+  local pkg="$HERE/plasmoid/com.exsbe.proxmox" shell=(org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell evaluateScript s)
+  kpackagetool6 -t Plasma/Applet -u "$pkg" >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i "$pkg"
+  if busctl --user call "${shell[@]}" '
+    panels().filter(p => p.location === "top" && !p.widgets().some(w => w.type === "com.exsbe.proxmox"))
+      .forEach(p => { p.addWidget("com.exsbe.proxmox"); print("added") });' | grep -q added; then
+    busctl --user call "${shell[@]}" '
+      panels().filter(p => p.location === "top").forEach(p => {
+        const ws = p.widgets(), ids = ws.filter(w => w.type !== "com.exsbe.proxmox").map(w => w.id);
+        const c = ws.find(w => w.type === "com.exsbe.containers");
+        ids.splice(c ? ids.indexOf(c.id) + 1 : ids.length, 0, ws.find(w => w.type === "com.exsbe.proxmox").id);
+        p.currentConfigGroup = ["General"];
+        p.writeConfig("AppletOrder", ids.join(";"));
+      });' >/dev/null
+    systemctl --user restart plasma-plasmashell.service
+  fi
+
+  # Lab dashboard on the main screen's desktop (shown only on the Lab workspace).
+  # New desktop widgets get a default size, so set position/size in the config with the shell stopped.
+  pkg="$HERE/plasmoid/com.exsbe.lab"
+  kpackagetool6 -t Plasma/Applet -u "$pkg" >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i "$pkg"
+  local id rc=~/.config/plasma-org.kde.plasma.desktop-appletsrc
+  id=$(busctl --user call "${shell[@]}" '
+    desktopsForActivity(currentActivity()).filter(d => d.screen === 0 && !d.widgets().some(w => w.type === "com.exsbe.lab"))
+      .forEach(d => print(d.addWidget("com.exsbe.lab").id));' | grep -o '[0-9]\+' || true)
+  if [ -n "$id" ]; then
+    sleep 1
+    systemctl --user stop plasma-plasmashell.service
+    sed -i -E "s/(Applet-$id:)[0-9.-]+,[0-9.-]+,[0-9.-]+,[0-9.-]+/\1408,0,540,900/g" "$rc"
+    systemctl --user start plasma-plasmashell.service
+  fi
+}
+
 sections=("$@")
-[ ${#sections[@]} -eq 0 ] && sections=(colors desktop apps containers splash workflow layout)
+[ ${#sections[@]} -eq 0 ] && sections=(colors desktop apps containers splash workflow polish lab layout)
 for s in "${sections[@]}"; do
   echo "==> $s"
   "$s"

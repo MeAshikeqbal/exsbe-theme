@@ -1,0 +1,19 @@
+# Exsbe palette for lazygit
+gui:
+  border: rounded
+  nerdFontsVersion: "3"
+  theme:
+    activeBorderColor: ["#8fa4c0", bold]
+    inactiveBorderColor: ["#3a3a3f"]
+    searchingActiveBorderColor: ["#e0c47a", bold]
+    optionsTextColor: ["#7fa8d6"]
+    selectedLineBgColor: ["#2e2e32"]
+    inactiveViewSelectedLineBgColor: ["#232326"]
+    cherryPickedCommitFgColor: ["#8fa4c0"]
+    cherryPickedCommitBgColor: ["#2e2e32"]
+    markedBaseCommitFgColor: ["#e0c47a"]
+    unstagedChangesColor: ["#e07a7a"]
+    defaultFgColor: ["#e6e6e8"]
+git:
+  pagers:
+    - pager: delta --dark --paging=never

@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""Exsbe Lab: talk to the Proxmox cluster with the desktop API token (from KWallet).
+
+  exsbe-pve status              cluster snapshot as JSON (panel widget)
+  exsbe-pve list                guests as tab-separated rows (picker)
+  exsbe-pve do VMID ACTION      start | shutdown | reboot | stop
+  exsbe-pve console VMID        container: pct enter in kitty; VM: noVNC app window
+  exsbe-pve web [PATH]          Proxmox web UI as an app window
+  exsbe-pve ssh-config          write ~/.ssh/config.d/exsbe-pve (a Host per guest)
+  exsbe-pve alerts              desktop notifications for cluster problems (timer)
+
+Endpoints are tried in order from ~/.config/exsbe/pve.conf; the one that answered is
+remembered. IP endpoints are verified against the cluster CA (exsbe-pve-setup saves it).
+"""
+import json, os, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+CONF = Path.home() / ".config/exsbe/pve.conf"
+CA = Path.home() / ".config/exsbe/pve-root-ca.pem"
+CACHE = Path.home() / ".cache/exsbe"
+TOKEN_ID = "exsbe@pve!desktop"
+BROWSER = ["flatpak", "run", "com.brave.Browser"]
+KITTY = next((k for k in ("/home/linuxbrew/.linuxbrew/bin/kitty", "/usr/bin/kitty") if os.path.exists(k)), "kitty")
+STORAGE_WARN = 0.85
+
+
+def conf():
+    c = {"endpoints": ["https://pve.example.lan"], "web": "https://pve.example.lan"}
+    if CONF.exists():
+        for line in CONF.read_text().splitlines():
+            k, _, v = line.partition("=")
+            if line.strip() and not line.lstrip().startswith("#") and v:
+                c[k.strip()] = v.split() if k.strip() == "endpoints" else v.strip()
+    return c
+
+
+def token():
+    r = subprocess.run(["secret-tool", "lookup", "service", "exsbe-pve", "account", TOKEN_ID],
+                       capture_output=True, text=True)
+    if r.returncode or not r.stdout:
+        sys.exit("no Proxmox token in KWallet; run exsbe-pve-setup root@NODE")
+    return r.stdout.strip()
+
+
+class Api:
+    def __init__(self):
+        self.auth = f"PVEAPIToken={TOKEN_ID}={token()}"
+        self.ctx_public = ssl.create_default_context()
+        self.ctx_cluster = ssl.create_default_context(cafile=str(CA)) if CA.exists() else None
+        last = CACHE / "pve-endpoint"
+        eps = conf()["endpoints"]
+        if last.exists() and last.read_text().strip() in eps:  # remembered one first
+            eps = [last.read_text().strip()] + [e for e in eps if e != last.read_text().strip()]
+        self.endpoints, self.base = eps, None
+
+    def _open(self, base, path, method, data, timeout):
+        req = urllib.request.Request(base + "/api2/json" + path, method=method,
+                                     data=urllib.parse.urlencode(data).encode() if data else None,
+                                     headers={"Authorization": self.auth})
+        # names under a real certificate use the system store; node IPs use the cluster CA
+        host = urllib.parse.urlparse(base).hostname or ""
+        ctx = self.ctx_cluster if host.replace(".", "").isdigit() and self.ctx_cluster else self.ctx_public
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+            return json.load(r)["data"]
+
+    def call(self, path, method="GET", data=None, timeout=6):
+        if self.base:
+            return self._open(self.base, path, method, data, timeout)
+        err = None
+        for base in self.endpoints:
+            try:
+                out = self._open(base, path, method, data, 3)
+            except urllib.error.HTTPError:
+                raise  # reachable, the request itself failed
+            except (OSError, ValueError) as e:
+                err = e
+                continue
+            self.base = base
+            CACHE.mkdir(parents=True, exist_ok=True)
+            (CACHE / "pve-endpoint").write_text(base)
+            return out
+        raise ConnectionError(f"cluster unreachable ({err})")
+
+
+def snapshot(api):
+    res = api.call("/cluster/resources")
+    status = api.call("/cluster/status")
+    try:
+        tasks = api.call("/cluster/tasks")
+    except Exception:
+        tasks = []
+    cluster = next((s for s in status if s["type"] == "cluster"), {})
+    ips = {s["name"]: s.get("ip") for s in status if s["type"] == "node"}
+    nodes = sorted(({"name": r["node"], "status": r.get("status"), "ip": ips.get(r["node"]),
+                     "cpu": r.get("cpu", 0), "mem": r.get("mem", 0), "maxmem": r.get("maxmem", 0),
+                     "uptime": r.get("uptime", 0)} for r in res if r["type"] == "node"),
+                   key=lambda n: n["name"])
+    guests = sorted(({"vmid": r["vmid"], "name": r.get("name", str(r["vmid"])), "type": r["type"],
+                      "node": r["node"], "status": r.get("status"), "cpu": r.get("cpu", 0),
+                      "mem": r.get("mem", 0), "maxmem": r.get("maxmem", 0), "uptime": r.get("uptime", 0),
+                      "tags": r.get("tags", ""), "template": bool(r.get("template"))}
+                     for r in res if r["type"] in ("qemu", "lxc")), key=lambda g: g["vmid"])
+    storage, seen = [], set()
+    for r in res:
+        if r["type"] != "storage" or not r.get("maxdisk"):
+            continue
+        key = r["storage"] if r.get("shared") else f'{r["node"]}/{r["storage"]}'
+        if key in seen:
+            continue
+        seen.add(key)
+        storage.append({"name": key, "type": r.get("plugintype"), "used": r.get("disk", 0),
+                        "total": r["maxdisk"], "status": r.get("status")})
+    storage.sort(key=lambda s: s["name"])
+    backups = sorted((t for t in tasks if t.get("type") == "vzdump" and t.get("endtime")),
+                     key=lambda t: t["endtime"], reverse=True)
+    failed = [t for t in backups if t.get("status") != "OK" and t["endtime"] > time.time() - 86400]
+    return {"cluster": cluster.get("name", ""), "quorate": bool(cluster.get("quorate", 1)),
+            "endpoint": api.base, "nodes": nodes, "guests": guests, "storage": storage,
+            "backup": {"last": backups[0]["endtime"] if backups else 0,
+                       "lastStatus": backups[0].get("status") if backups else "",
+                       "failed": [{"node": t["node"], "upid": t["upid"], "status": t.get("status", ""),
+                                   "id": t.get("id", ""), "end": t["endtime"]} for t in failed]}}
+
+
+def guest_ip(api, g):
+    """First useful IPv4 of a running guest (LAN first), or ''."""
+    if g["status"] != "running":
+        return ""
+    try:
+        if g["type"] == "lxc":
+            addrs = [i.get("inet", "").split("/")[0] for i in api.call(f'/nodes/{g["node"]}/lxc/{g["vmid"]}/interfaces')]
+        else:
+            ifs = api.call(f'/nodes/{g["node"]}/qemu/{g["vmid"]}/agent/network-get-interfaces')["result"]
+            addrs = [a["ip-address"] for i in ifs for a in i.get("ip-addresses", []) if a.get("ip-address-type") == "ipv4"]
+    except Exception:
+        return ""
+    addrs = [a for a in addrs if a and not a.startswith(("127.", "172.17.", "169.254."))]
+    return next((a for a in addrs if a.startswith("192.168.")), addrs[0] if addrs else "")
+
+
+def with_ips(api, guests):
+    with ThreadPoolExecutor(8) as ex:
+        for g, ip in zip(guests, ex.map(lambda g: guest_ip(api, g), guests)):
+            g["ip"] = ip
+    CACHE.mkdir(parents=True, exist_ok=True)
+    (CACHE / "pve-ips.json").write_text(json.dumps({str(g["vmid"]): g["ip"] for g in guests if g["ip"]}))
+    return guests
+
+
+def cached_ips():
+    try:
+        return json.loads((CACHE / "pve-ips.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def find(api, vmid):
+    for g in snapshot(api)["guests"]:
+        if str(g["vmid"]) == str(vmid):
+            return g
+    sys.exit(f"no guest {vmid}")
+
+
+def app_window(url):
+    subprocess.Popen(BROWSER + [f"--app={url}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+
+def notify(title, body, urgency="normal", icon="network-server"):
+    subprocess.run(["notify-send", "-a", "Lab", "-i", icon, "-u", urgency, title, body])
+
+
+def cmd_alerts(api):
+    state_file = CACHE / "pve-alerts.json"
+    try:
+        state = json.loads(state_file.read_text())
+    except (OSError, ValueError):
+        state = {"active": {}, "seenBackups": []}
+    try:
+        s = snapshot(api)
+    except ConnectionError:
+        return  # away from home without a route: stay quiet
+    now = {}
+    for n in s["nodes"]:
+        if n["status"] != "online":
+            now[f'node:{n["name"]}'] = (f'Node {n["name"]} is offline', "critical")
+    if not s["quorate"]:
+        now["quorum"] = (f'Cluster {s["cluster"]} lost quorum', "critical")
+    for st in s["storage"]:
+        if st["total"] and st["used"] / st["total"] >= STORAGE_WARN:
+            now[f'storage:{st["name"]}'] = (f'Storage {st["name"]} is {st["used"] / st["total"]:.0%} full', "normal")
+    for key, (msg, urg) in now.items():
+        if key not in state["active"]:
+            notify("Lab", msg, urg, "dialog-warning")
+    for key, msg in state["active"].items():
+        if key not in now:
+            notify("Lab", f"Resolved: {msg}", "low", "dialog-ok")
+    seen = set(state["seenBackups"])
+    for b in s["backup"]["failed"]:
+        if b["upid"] not in seen and state.get("initialized"):
+            notify("Lab backup failed", f'{b["id"] or "job"} on {b["node"]}: {b["status"]}', "critical", "dialog-error")
+        seen.add(b["upid"])
+    state = {"initialized": True, "active": {k: m for k, (m, _) in now.items()}, "seenBackups": sorted(seen)[-200:]}
+    CACHE.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(json.dumps(state))
+
+
+def cmd_ssh_config(api):
+    s = snapshot(api)
+    guests = with_ips(api, [g for g in s["guests"] if not g["template"]])
+    out = ["# Generated by exsbe-pve ssh-config; overrides go in another file in this directory.",
+           f'# {s["cluster"]}: {len(s["nodes"])} nodes, {len(guests)} guests', ""]
+    for n in s["nodes"]:
+        out += [f'Host {n["name"]}', f'  HostName {n["ip"]}', "  User root", ""]
+    for g in guests:
+        ip = g["ip"] or cached_ips().get(str(g["vmid"]))
+        if ip:
+            # Terraform VMs (lab-infra) log in as your own user; everything else as root
+            user = [] if "terraform" in g["tags"].split(";") else ["  User root"]
+            out += [f'Host {g["name"]}', f"  HostName {ip}", *user, ""]
+    d = Path.home() / ".ssh/config.d"
+    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (d / "exsbe-pve").write_text("\n".join(out))
+    print(f'{d / "exsbe-pve"}: {sum(1 for l in out if l.startswith("Host "))} hosts')
+
+
+def main():
+    a = sys.argv[1:] or ["status"]
+    api = Api()
+    try:
+        if a[0] == "status":
+            json.dump(snapshot(api), sys.stdout)
+        elif a[0] == "list":
+            ips = cached_ips()
+            for g in snapshot(api)["guests"]:
+                kind = "ct" if g["type"] == "lxc" else "vm"
+                row = [str(g["vmid"]), g["name"], g["status"], kind, g["node"], ips.get(str(g["vmid"]), "")]
+                if "--fzf" in a:  # vmid, name, then a coloured display column
+                    dot = "\033[38;2;143;199;154m●" if g["status"] == "running" else "\033[38;2;90;90;98m○"
+                    row = row[:2] + [f"{dot}\033[0m {g['name']:<16}\033[38;2;168;168;176m {kind} {g['vmid']}  "
+                                     f"{g['node']:<6} {row[5]}\033[0m"]
+                print("\t".join(row))
+        elif a[0] == "do":
+            g = find(api, a[1])
+            api.call(f'/nodes/{g["node"]}/{g["type"]}/{g["vmid"]}/status/{a[2]}', "POST")
+        elif a[0] == "console":
+            g = find(api, a[1])
+            if g["type"] == "lxc":
+                node_ip = next(n["ip"] for n in snapshot(api)["nodes"] if n["name"] == g["node"])
+                os.execvp(KITTY, [KITTY, "--title", g["name"], "ssh", "-t", f"root@{node_ip}", "pct", "enter", str(g["vmid"])])
+            app_window(f'{conf()["web"]}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
+        elif a[0] == "web":
+            if len(a) > 1 and a[1].isdigit():  # a guest's page
+                g = find(api, a[1])
+                app_window(f'{conf()["web"]}/#v1:0:={g["type"]}%2F{g["vmid"]}')
+            else:
+                app_window(conf()["web"] + (a[1] if len(a) > 1 else ""))
+        elif a[0] == "ssh-config":
+            cmd_ssh_config(api)
+        elif a[0] == "alerts":
+            cmd_alerts(api)
+        else:
+            sys.exit(__doc__)
+    except ConnectionError as e:
+        if a[0] == "status":
+            json.dump({"error": str(e)}, sys.stdout)
+        else:
+            sys.exit(str(e))
+    except urllib.error.HTTPError as e:
+        sys.exit(f"Proxmox: {e.code} {e.reason}")
+
+
+if __name__ == "__main__":
+    main()

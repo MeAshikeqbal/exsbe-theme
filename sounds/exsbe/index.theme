@@ -1,0 +1,9 @@
+[Sound Theme]
+Name=Exsbe
+Comment=Soft chimes for the Exsbe desktop
+Inherits=ocean,freedesktop
+Directories=stereo
+Example=theme-demo
+
+[stereo]
+OutputProfile=stereo

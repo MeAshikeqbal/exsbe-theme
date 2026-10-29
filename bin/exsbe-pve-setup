@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# One-time Proxmox setup for the Lab tools, over root SSH to any cluster node:
+# least-privilege users, roles and API tokens, with the token secrets piped straight into
+# KWallet (Secret Service) - they are never printed or written to disk.
+# Re-running is safe: roles are refreshed, existing tokens are kept.
+# Usage: exsbe-pve-setup root@NODE
+set -euo pipefail
+node=${1:?usage: exsbe-pve-setup root@NODE}
+pve() { ssh -o BatchMode=yes "$node" "$@"; }
+
+# user ROLE PRIVS COMMENT  ->  user@pve with ROLE on /
+user() {
+  pve "pveum role add $2 --privs '$3' 2>/dev/null || pveum role modify $2 --privs '$3'
+       pveum user add $1@pve --comment '$4' 2>/dev/null || true
+       pveum acl modify / --users $1@pve --roles $2"
+}
+# token USER NAME  ->  KWallet item service=exsbe-pve account=USER@pve!NAME
+token() {
+  local id="$1@pve!$2"
+  secret-tool lookup service exsbe-pve account "$id" >/dev/null && return
+  pve "pveum user token remove $1@pve $2 2>/dev/null; pveum user token add $1@pve $2 --privsep 0 --output-format json" |
+    python3 -c 'import json,sys; sys.stdout.write(json.load(sys.stdin)["value"])' |
+    secret-tool store --label="Proxmox API token $id" service exsbe-pve account "$id"
+  echo "stored $id in KWallet"
+}
+
+# desktop panel, picker, alerts, ssh config: see everything, power/console guests, change nothing
+user exsbe ExsbeDesktop \
+  "Sys.Audit,VM.Audit,VM.PowerMgmt,VM.Console,VM.GuestAgent.Audit,Datastore.Audit,Pool.Audit,SDN.Audit" \
+  "Exsbe desktop (panel, picker, alerts)"
+token exsbe desktop
+
+# Terraform (bpg/proxmox): create, clone and configure guests; no user/permission/node admin
+user terraform ExsbeTerraform \
+  "Datastore.AllocateSpace,Datastore.AllocateTemplate,Datastore.Audit,Pool.Allocate,Pool.Audit,Sys.Audit,Sys.AccessNetwork,SDN.Use,VM.Allocate,VM.Audit,VM.Clone,VM.Config.CDROM,VM.Config.Cloudinit,VM.Config.CPU,VM.Config.Disk,VM.Config.HWType,VM.Config.Memory,VM.Config.Network,VM.Config.Options,VM.GuestAgent.Audit,VM.Migrate,VM.PowerMgmt" \
+  "Terraform"
+token terraform tf
+
+# cluster CA, so nodes can be reached by IP with verified TLS when the proxy name is unavailable
+mkdir -p ~/.config/exsbe
+pve cat /etc/pve/pve-root-ca.pem > ~/.config/exsbe/pve-root-ca.pem
+echo "done"

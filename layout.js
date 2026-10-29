@@ -33,6 +33,7 @@ add(top, "org.kde.plasma.panelspacer");
 add(top, "org.kde.plasma.systemmonitor.cpu");
 add(top, "org.kde.plasma.systemmonitor.memory");
 add(top, "com.exsbe.containers");
+add(top, "com.exsbe.proxmox");
 add(top, "org.kde.plasma.systemtray");
 
 // dock: browser, terminal, editor, files; hides when a window covers it

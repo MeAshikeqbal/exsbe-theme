@@ -1,0 +1,8 @@
+[Unit]
+Description=Lab Proxmox alerts and SSH config
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/exsbe-pve alerts
+ExecStart=-%h/.local/bin/exsbe-pve ssh-config

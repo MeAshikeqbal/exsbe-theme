@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Proxmox
+Comment=Lab Proxmox web UI
+Icon=network-server
+Exec=@HOME@/.local/bin/exsbe-pve web
+Terminal=false
+Categories=Network;System;
+StartupWMClass=brave-pve.example.lan__-Default

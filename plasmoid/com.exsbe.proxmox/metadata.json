@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "System Information",
+        "Description": "Proxmox cluster nodes, guests, storage and backups at a glance",
+        "Icon": "network-server",
+        "Id": "com.exsbe.proxmox",
+        "License": "MIT",
+        "Name": "Proxmox",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

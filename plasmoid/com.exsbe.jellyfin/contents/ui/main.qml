@@ -115,13 +115,12 @@ PlasmoidItem {
             id: chips
             anchors.centerIn: parent
             spacing: Kirigami.Units.largeSpacing
+            // stream count; the icon turns amber while anything transcodes, dims when idle
             Chip {
                 icon: "video-television-symbolic"
+                iconColor: root.transcoding > 0 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.textColor
                 opacity: root.error !== "" || root.playing === 0 ? 0.45 : 1
-                value: root.error !== "" ? "–" : String(root.playing)
-                valueColor: root.transcoding > 0 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.textColor
-                detail: root.transcoding > 0 ? root.transcoding + " tc" : ""
-                detailColor: Kirigami.Theme.neutralTextColor
+                value: root.error !== "" ? "–" : root.playing > 0 ? String(root.playing) : ""
             }
         }
     }
@@ -362,6 +361,7 @@ PlasmoidItem {
         property string icon
         property string value
         property string detail: ""
+        property color iconColor: Kirigami.Theme.textColor
         property color valueColor: Kirigami.Theme.textColor
         property color detailColor: Kirigami.Theme.textColor
         property string widestValue: ""
@@ -370,12 +370,13 @@ PlasmoidItem {
         Kirigami.Icon {
             source: icon
             isMask: true
-            color: Kirigami.Theme.textColor
-            opacity: 0.7
+            color: iconColor
+            opacity: iconColor === Kirigami.Theme.textColor ? 0.7 : 1
             Layout.preferredWidth: Kirigami.Units.iconSizes.small
             Layout.preferredHeight: Kirigami.Units.iconSizes.small
         }
         PlasmaComponents3.Label {
+            visible: value !== ""
             text: value
             color: valueColor
             font.features: { "tnum": 1 }

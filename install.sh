@@ -172,8 +172,10 @@ splash() {
 }
 
 layout() {
-  local pkg="$HERE/plasmoid/com.exsbe.workspaces"
-  kpackagetool6 -t Plasma/Applet -u "$pkg" >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i "$pkg"
+  local pkg
+  for pkg in com.exsbe.workspaces com.exsbe.sysmon; do
+    kpackagetool6 -t Plasma/Applet -u "$HERE/plasmoid/$pkg" >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i "$HERE/plasmoid/$pkg"
+  done
   install -Dm644 "$HERE/icons/exsbe.png" ~/.local/share/exsbe/exsbe.png
   busctl --user call org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell \
     evaluateScript s "$(sed "s|@ICON@|$HOME/.local/share/exsbe/exsbe.png|" "$HERE/layout.js")"

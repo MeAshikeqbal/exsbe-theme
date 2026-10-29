@@ -30,8 +30,7 @@ add(top, "org.kde.plasma.digitalclock", {
     Appearance: { autoFontAndSize: false, fontFamily: "Inter Variable", fontSize: 10, fontWeight: 500, showDate: true, dateDisplayFormat: "BesideTime", dateFormat: "custom", customDateFormat: "ddd d MMM", use24hFormat: 0 }
 });
 add(top, "org.kde.plasma.panelspacer");
-add(top, "org.kde.plasma.systemmonitor.cpu");
-add(top, "org.kde.plasma.systemmonitor.memory");
+add(top, "com.exsbe.sysmon");
 add(top, "com.exsbe.containers");
 add(top, "com.exsbe.proxmox");
 add(top, "com.exsbe.jellyfin");

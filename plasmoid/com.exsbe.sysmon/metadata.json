@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "System Information",
+        "Description": "CPU, memory and GPU at a glance, with history, temperatures, fans and top processes",
+        "Icon": "utilities-system-monitor",
+        "Id": "com.exsbe.sysmon",
+        "License": "MIT",
+        "Name": "System",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

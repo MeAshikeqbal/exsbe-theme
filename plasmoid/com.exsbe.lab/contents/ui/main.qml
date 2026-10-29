@@ -353,7 +353,7 @@ PlasmoidItem {
                     text: "Guests"
                     PlasmaComponents3.ToolTip.text: "Guest picker (Meta+Shift+P)"
                     PlasmaComponents3.ToolTip.visible: hovered
-                    onClicked: root.run("kitty --title lab pvepick")
+                    onClicked: root.run("kitty --title lab -o initial_window_width=170c -o initial_window_height=42c -o remember_window_size=no pvepick")
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "internet-web-browser"

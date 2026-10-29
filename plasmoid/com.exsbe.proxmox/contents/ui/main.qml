@@ -181,7 +181,7 @@ PlasmoidItem {
                     display: PlasmaComponents3.AbstractButton.IconOnly
                     PlasmaComponents3.ToolTip.text: "Guest picker (Meta+Shift+P)"
                     PlasmaComponents3.ToolTip.visible: hovered
-                    onClicked: { root.detach("kitty --title lab pvepick"); root.expanded = false }
+                    onClicked: { root.detach("kitty --title lab -o initial_window_width=170c -o initial_window_height=42c -o remember_window_size=no pvepick"); root.expanded = false }
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "internet-web-browser"

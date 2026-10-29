@@ -2,7 +2,10 @@
 """Exsbe Lab: talk to the Proxmox cluster with the desktop API token (from KWallet).
 
   exsbe-pve status              cluster snapshot as JSON (panel widget)
-  exsbe-pve list                guests as tab-separated rows (picker)
+  exsbe-pve list [--fzf]        guests as tab-separated rows (--fzf: coloured, for pvepick)
+  exsbe-pve info VMID           pvepick preview: status, load, disks, tags, notes
+  exsbe-pve connect VMID        ssh, else console; offers to start a stopped guest
+  exsbe-pve confirm VMID ACTION ask, then start | shutdown | reboot | stop
   exsbe-pve do VMID ACTION      start | shutdown | reboot | stop
   exsbe-pve console VMID        container: pct enter in kitty; VM: noVNC app window
   exsbe-pve web [PATH]          Proxmox web UI as an app window
@@ -14,7 +17,7 @@ remembered. IP endpoints are verified against the cluster CA (exsbe-pve-setup sa
 With `pbs = URL` in pve.conf and a PBS token (exsbe-pve-setup --pbs), status also covers
 Proxmox Backup Server: datastores, garbage collection, verify/prune/sync jobs, failed tasks.
 """
-import json, os, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+import json, os, re, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -273,6 +276,145 @@ def cmd_ssh_config(api):
     print(f'{d / "exsbe-pve"}: {sum(1 for l in out if l.startswith("Host "))} hosts')
 
 
+# --- pvepick (fzf) ---------------------------------------------------------------------
+def rgb(h, bold=False):
+    return f"\033[{'1;' if bold else ''}38;2;{int(h[1:3], 16)};{int(h[3:5], 16)};{int(h[5:7], 16)}m"
+
+
+RST, FG, DIM, FAINT = "\033[0m", rgb("#e6e6e8"), rgb("#a8a8b0"), rgb("#5a5a62")
+GREEN, AMBER, RED, BLUE, TEAL, ACCENT = (rgb(c) for c in ("#8fc79a", "#e0c47a", "#e07a7a", "#7fa8d6", "#7fc8c8", "#8fa4c0"))
+SNAP_CACHE = CACHE / "pve-snapshot.json"
+
+
+def gib(b):
+    return f"{b / 2**30:.1f}G" if b < 100 * 2**30 else f"{b / 2**30:.0f}G"
+
+
+def dur(s):
+    return f"{s // 86400} d" if s >= 86400 else f"{s // 3600} h" if s >= 3600 else f"{s // 60} min"
+
+
+def bar(frac, width=22):
+    frac = max(0.0, min(1.0, frac))
+    col = RED if frac >= 0.9 else AMBER if frac >= 0.75 else ACCENT
+    n = round(frac * width)
+    return f"{col}{'━' * n}{FAINT}{'━' * (width - n)}{RST}"
+
+
+def ssh_hosts():
+    try:
+        return {l.split()[1] for l in (Path.home() / ".ssh/config.d/exsbe-pve").read_text().splitlines() if l.startswith("Host ")}
+    except OSError:
+        return set()
+
+
+def fzf_list(api):
+    """First line: cluster summary (fzf --header-lines 1). Then vmid \\t name \\t status \\t display."""
+    s = snapshot(api)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    SNAP_CACHE.write_text(json.dumps(s))
+    ips = cached_ips()
+    up = [n for n in s["nodes"] if n["status"] == "online"]
+    run = [g for g in s["guests"] if g["status"] == "running" and not g["template"]]
+    issues = sum(1 for st in s["storage"] if st["total"] and st["used"] / st["total"] >= STORAGE_WARN) + len(s["backup"]["failed"])
+    print("\t\t\t" + f" {ACCENT}{s['cluster']}{RST}  {DIM}{len(up)}/{len(s['nodes'])} nodes · "
+          f"{len(run)}/{len([g for g in s['guests'] if not g['template']])} running"
+          + (f"{RST} · {RED}{issues} issue{'s' * (issues != 1)}" if issues else "") + RST)
+    for g in s["guests"]:
+        if g["template"]:
+            continue
+        on = g["status"] == "running"
+        kind = f"{TEAL}ct" if g["type"] == "lxc" else f"{BLUE}vm"
+        load = f"{g['cpu'] * 100:3.0f}%  {gib(g['mem']):>5}/{gib(g['maxmem']):<5}" if on else f"{'':4}  {'':5} {'':5}"
+        line = (f"{GREEN + '●' if on else FAINT + '○'} {FG if on else DIM}{g['name']:<17}{RST}"
+                f"{kind if on else FAINT + kind[-2:]}{RST} {DIM}{g['vmid']:<4} {g['node']:<6}{RST} "
+                f"{FG if on else FAINT}{load}{RST} {rgb('#8a8a92') if on else FAINT}{ips.get(str(g['vmid']), '')}{RST}")
+        print("\t".join([str(g["vmid"]), g["name"], g["status"], line]))
+
+
+def fzf_info(api, vmid):
+    """Preview pane for one guest (cluster data from the list's cache, config fetched live)."""
+    try:
+        s = json.loads(SNAP_CACHE.read_text())
+    except (OSError, ValueError):
+        s = snapshot(api)
+    g = next((x for x in s["guests"] if str(x["vmid"]) == str(vmid)), None)
+    if not g:
+        return print(f"{DIM}no guest {vmid}{RST}")
+    cfg = api.call(f'/nodes/{g["node"]}/{g["type"]}/{g["vmid"]}/config')
+    on, ct = g["status"] == "running", g["type"] == "lxc"
+    ip = cached_ips().get(str(vmid), "")
+    print(f" {GREEN + '●' if on else FAINT + '○'} {rgb('#e6e6e8', True)}{g['name']}{RST}"
+          f"   {(GREEN + 'running') if on else (DIM + g['status'])}{RST}" + (f"{DIM} · up {dur(g['uptime'])}{RST}" if on else ""))
+    print(f"   {DIM}{'container' if ct else 'VM'} {g['vmid']} on {g['node']}" + (f" · {ip}" if ip else "") + RST)
+    print()
+    cores = cfg.get("cores") or 1
+    if on:
+        print(f"   {DIM}cpu{RST}   {bar(g['cpu'])} {FG}{g['cpu'] * 100:3.0f}%{RST}  {DIM}of {cores} core{'s' * (cores > 1)}{RST}")
+        print(f"   {DIM}mem{RST}   {bar(g['mem'] / g['maxmem'] if g['maxmem'] else 0)} {FG}{gib(g['mem'])}{RST}{DIM} / {gib(g['maxmem'])}{RST}")
+    else:
+        print(f"   {DIM}cpu   {cores} core{'s' * (cores > 1)}   mem {gib(g['maxmem'])}{RST}")
+    disks = [f"{k} {v.split(',')[0]}" + next((f" {p[5:]}" for p in v.split(",") if p.startswith("size=")), "")
+             for k, v in sorted(cfg.items(), key=lambda kv: (kv[0] != "rootfs", kv[0]))
+             if re.match(r"^(rootfs|mp\d+|scsi\d+|virtio\d+|sata\d+|ide\d+)$", k) and "cloudinit" not in v and "media=cdrom" not in v]
+    for i, d in enumerate(disks):
+        print(f"   {DIM}{'disk' if i == 0 else '    '}{RST}  {FG}{d}{RST}")
+    print()
+    extra = []
+    if g["tags"]:
+        extra.append(("tags", " ".join(f"{ACCENT}#{t}{RST}" for t in g["tags"].split(";"))))
+    extra.append(("boot", f"{FG}starts on boot{RST}" if str(cfg.get("onboot", "0")) == "1" else f"{DIM}manual start{RST}"))
+    if not ct:
+        extra.append(("cpu", f"{FG}{cfg.get('cpu', 'kvm64')}{RST}"))
+    for k, v in extra:
+        print(f"   {DIM}{k:<5}{RST} {v}")
+    # Proxmox notes, minus images and link-only lines (community-scripts add a block of them)
+    notes = [re.sub(r"<[^>]+>", " ", l).strip() for l in cfg.get("description", "").splitlines()
+             if not re.search(r"<a\s|<img|\]\(|href=|^\s*!\[", l)]
+    notes = [re.sub(r"\s+", " ", l) for l in notes if l and not l.startswith("#")]
+    if notes:
+        print(f"\n   {DIM}notes{RST}")
+        for l in notes[:6]:
+            print(f"   {FG}{l[:70]}{RST}")
+    hint = (f"ssh {g['name']}" if g["name"] in ssh_hosts() else "console (pct enter)" if ct else "console (noVNC)") if on else "start it"
+    print(f"\n   {FAINT}⏎ {hint}{RST}")
+
+
+def connect(api, vmid):
+    """Enter in the picker: ssh when possible, else the console; a stopped guest offers to start."""
+    g = find(api, vmid)
+    if g["status"] != "running":
+        if input(f"\n  {g['name']} is {g['status']}. Start it? [y/N] ").strip().lower() != "y":
+            return
+        api.call(f'/nodes/{g["node"]}/{g["type"]}/{g["vmid"]}/status/start', "POST")
+        print(f"  starting {g['name']}", end="", flush=True)
+        for _ in range(60):
+            time.sleep(2)
+            print(".", end="", flush=True)
+            if find(api, vmid)["status"] == "running":
+                break
+        print()
+        time.sleep(3)  # let sshd come up
+    if g["name"] in ssh_hosts():
+        os.execvp("ssh", ["ssh", g["name"]])
+    if g["type"] == "lxc":
+        node_ip = next(n["ip"] for n in snapshot(api)["nodes"] if n["name"] == g["node"])
+        os.execvp("ssh", ["ssh", "-t", f"root@{node_ip}", "pct", "enter", str(g["vmid"])])
+    app_window(f'{conf()["web"]}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
+    print(f"  {g['name']} has no IP for ssh; opened its console in a window")
+
+
+def confirm(api, vmid, action):
+    """Ask before shutdown / reboot / stop (start needs no confirmation)."""
+    g = find(api, vmid)
+    if action != "start":
+        verb = {"shutdown": "Shut down", "reboot": "Reboot", "stop": "Force-stop"}.get(action, action)
+        if input(f"\n  {verb} {g['name']} ({'ct' if g['type'] == 'lxc' else 'vm'} {g['vmid']} on {g['node']})? [y/N] ").strip().lower() != "y":
+            return
+    api.call(f'/nodes/{g["node"]}/{g["type"]}/{g["vmid"]}/status/{action}', "POST")
+    time.sleep(1.5)
+
+
 def main():
     a = sys.argv[1:] or ["status"]
     api = Api()
@@ -280,15 +422,19 @@ def main():
         if a[0] == "status":
             json.dump(snapshot(api), sys.stdout)
         elif a[0] == "list":
-            ips = cached_ips()
-            for g in snapshot(api)["guests"]:
-                kind = "ct" if g["type"] == "lxc" else "vm"
-                row = [str(g["vmid"]), g["name"], g["status"], kind, g["node"], ips.get(str(g["vmid"]), "")]
-                if "--fzf" in a:  # vmid, name, then a coloured display column
-                    dot = "\033[38;2;143;199;154m●" if g["status"] == "running" else "\033[38;2;90;90;98m○"
-                    row = row[:2] + [f"{dot}\033[0m {g['name']:<16}\033[38;2;168;168;176m {kind} {g['vmid']}  "
-                                     f"{g['node']:<6} {row[5]}\033[0m"]
-                print("\t".join(row))
+            if "--fzf" in a:
+                fzf_list(api)
+            else:
+                ips = cached_ips()
+                for g in snapshot(api)["guests"]:
+                    kind = "ct" if g["type"] == "lxc" else "vm"
+                    print("\t".join([str(g["vmid"]), g["name"], g["status"], kind, g["node"], ips.get(str(g["vmid"]), "")]))
+        elif a[0] == "info":
+            fzf_info(api, a[1])
+        elif a[0] == "connect":
+            connect(api, a[1])
+        elif a[0] == "confirm":
+            confirm(api, a[1], a[2])
         elif a[0] == "do":
             g = find(api, a[1])
             api.call(f'/nodes/{g["node"]}/{g["type"]}/{g["vmid"]}/status/{a[2]}', "POST")

@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
-# Pick a Proxmox guest with fzf.  Enter: ssh   Ctrl+O: console   Ctrl+W: web UI
-# Ctrl+S: start   Ctrl+X: shutdown   Ctrl+R: reboot   (the list refreshes after each action)
+# Lab guest picker (Meta+Shift+P): fzf over every Proxmox VM and container, with a live
+# details pane. Enter connects (ssh, else the console; offers to start a stopped guest).
+# Ctrl+O console · Ctrl+W web UI · Ctrl+S start · Ctrl+X shut down · Ctrl+R reboot
+# (shut down / reboot ask first) · Ctrl+L refresh. The list refreshes after every action.
 set -euo pipefail
 export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 rows="exsbe-pve list --fzf"
-act() { echo "execute-silent(exsbe-pve do {1} $1 >/dev/null 2>&1; sleep 1)+reload($rows)"; }
-pick=$($rows | fzf --ansi --delimiter '\t' --with-nth 3 --prompt 'lab ❯ ' --height 100% --layout reverse \
-  --header 'enter ssh · ^o console · ^w web · ^s start · ^x shutdown · ^r reboot' \
+act() { echo "execute(exsbe-pve confirm {1} $1)+reload($rows)+refresh-preview"; }
+
+exec fzf --ansi --delimiter '\t' --with-nth 4 --header-lines 1 \
+  < <($rows) \
+  --style full --layout reverse --height 100% --info inline-right \
+  --prompt '❯ ' --pointer '▌' --ghost 'type to filter by name, node or IP' \
+  --list-label ' guests ' --input-label ' search ' --preview-label ' details ' \
+  --preview 'exsbe-pve info {1}' --preview-window 'right,48%,wrap,<60(down,40%,wrap)' \
+  --footer '⏎ connect  ^o console  ^w web  ^s start  ^x shut down  ^r reboot  ^l refresh' \
+  --bind 'enter:become(exsbe-pve connect {1})' \
   --bind "ctrl-s:$(act start)" --bind "ctrl-x:$(act shutdown)" --bind "ctrl-r:$(act reboot)" \
-  --bind "ctrl-o:execute-silent(setsid -f exsbe-pve console {1} >/dev/null 2>&1)" \
-  --bind "ctrl-w:execute-silent(exsbe-pve web {1} >/dev/null 2>&1)" \
-  --color 'bg:#232326,bg+:#2e2e32,header:#5a5a62,prompt:#8fa4c0,pointer:#8fa4c0' | cut -f2) || exit 0
-[ -n "$pick" ] && exec ssh "$pick"
+  --bind "ctrl-l:reload($rows)+refresh-preview" \
+  --bind 'ctrl-o:execute-silent(systemd-run --user --scope --quiet --collect setsid -f exsbe-pve console {1} >/dev/null 2>&1)' \
+  --bind 'ctrl-w:execute-silent(exsbe-pve web {1} >/dev/null 2>&1)' \
+  --color 'bg:-1,bg+:#2e2e32,fg:#c8c8cc,fg+:#e6e6e8,hl:#7fa8d6,hl+:#9fc0e6,gutter:-1' \
+  --color 'border:#3a3a3f,label:#8fa4c0,header:#a8a8b0,footer:#8a8a92,info:#5a5a62' \
+  --color 'prompt:#8fa4c0,pointer:#8fa4c0,spinner:#b494d6,ghost:#6a6a72,scrollbar:#3a3a3f'

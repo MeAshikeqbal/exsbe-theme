@@ -1,0 +1,11 @@
+# Lab workspace: a shell, btop, and the pve node
+new_tab shell
+cd ~
+launch --title shell
+
+new_tab btop
+launch --title btop btop
+
+new_tab pve
+launch --title pve ssh pve
+focus_tab 0

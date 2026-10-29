@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate the Exsbe Plasma style: rounded task-manager and pager SVGs.
 
-Only the dock items (widgets/tasks.svg), the pager (widgets/pager.svg) and the desktop
-widget card (widgets/background.svg, translucentbackground.svg) are provided; every other
-element falls back to the Breeze ("default") Plasma style.
+Only the dock items (widgets/tasks.svg), the pager (widgets/pager.svg), the desktop widget
+card (widgets/background.svg, translucentbackground.svg) and the popup / notification /
+KRunner card (dialogs/background.svg, solid/dialogs/background.svg) are provided; every
+other element falls back to the Breeze ("default") Plasma style.
 Colors come from the active color scheme through the ColorScheme-* classes.
 """
 import json
@@ -110,16 +111,66 @@ def card(opacity):
     return svg(groups, 3 * r + 2 + 4 * (pad + 2), 3 * r)
 
 
+def shadow(size, alpha):
+    """shadow-* pieces: soft black falloff around the frame (corners radial, edges linear)."""
+    S, out, x = size, [], 0
+    defs = []
+    corners = {"topleft": (S, S), "topright": (0, S), "bottomleft": (S, 0), "bottomright": (0, 0)}
+    for name, (cx, cy) in corners.items():
+        gid = f"sg-{name}"
+        defs.append(f'<radialGradient id="{gid}" gradientUnits="userSpaceOnUse" cx="{x + cx}" cy="{cy}" r="{S}">'
+                    f'<stop offset="0" stop-color="#000" stop-opacity="{alpha}"/>'
+                    f'<stop offset="0.45" stop-color="#000" stop-opacity="{alpha * 0.35:.3f}"/>'
+                    f'<stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>')
+        out.append(f'<rect id="shadow-{name}" x="{x}" y="0" width="{S}" height="{S}" fill="url(#{gid})"/>')
+        x += S + 2
+    # edges: (name, width, height, gradient direction x1 y1 x2 y2 from the frame outwards)
+    edges = {"top": (1, S, "0 1 0 0"), "bottom": (1, S, "0 0 0 1"), "left": (S, 1, "1 0 0 0"), "right": (S, 1, "0 0 1 0")}
+    for name, (w, h, d) in edges.items():
+        gid = f"sg-{name}"
+        x1, y1, x2, y2 = d.split()
+        defs.append(f'<linearGradient id="{gid}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}">'
+                    f'<stop offset="0" stop-color="#000" stop-opacity="{alpha}"/>'
+                    f'<stop offset="0.45" stop-color="#000" stop-opacity="{alpha * 0.35:.3f}"/>'
+                    f'<stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>')
+        out.append(f'<rect id="shadow-{name}" x="{x}" y="0" width="{w}" height="{h}" fill="url(#{gid})"/>')
+        x += w + 2
+    out.append(f'<rect id="shadow-center" x="{x}" y="0" width="1" height="1" fill="none"/>')
+    x += 3
+    for side in ("top", "bottom", "left", "right"):
+        out.append(f'<rect id="shadow-hint-{side}-margin" x="{x}" y="0" width="{S}" height="{S}" fill="none"/>')
+        x += S + 2
+    return "<defs>" + "".join(defs) + "</defs>\n" + "\n".join(out), x
+
+
+def dialog(opacity):
+    """Popups, notifications, KRunner: the desktop card's look, tighter radius, plus mask and shadow."""
+    r, pad = 14, 10
+    groups = [frame("", 0, r, ("ColorScheme-Background", opacity), ("ColorScheme-Text", 0.10)),
+              frame("mask", 3 * r + 2, r, ("ColorScheme-Background", 1), None)]
+    x = 2 * (3 * r + 2)
+    for side in ("top", "bottom", "left", "right"):
+        groups.append(f'<rect id="hint-{side}-margin" x="{x}" y="0" width="{pad}" height="{pad}" fill="none"/>')
+        x += pad + 2
+    sh, w = shadow(24, 0.32)
+    groups.append(f'<g transform="translate({x},{3 * r + 4})">{sh}</g>')
+    return svg(groups, x + w, 3 * r + 4 + 24)
+
+
 def main():
     (OUT / "widgets").mkdir(parents=True, exist_ok=True)
     (OUT / "widgets/tasks.svg").write_text(tasks())
     (OUT / "widgets/pager.svg").write_text(pager())
     (OUT / "widgets/background.svg").write_text(card(0.92))
     (OUT / "widgets/translucentbackground.svg").write_text(card(0.75))
+    (OUT / "dialogs").mkdir(exist_ok=True)
+    (OUT / "dialogs/background.svg").write_text(dialog(0.92))
+    (OUT / "solid/dialogs").mkdir(parents=True, exist_ok=True)
+    (OUT / "solid/dialogs/background.svg").write_text(dialog(1.0))
     (OUT / "metadata.json").write_text(json.dumps({
         "KPlugin": {
             "Authors": [{"Name": "Exsbe"}],
-            "Description": "Breeze with rounded dock items, desktop pager and widget cards",
+            "Description": "Breeze with rounded dock items, desktop pager, widget cards and popup cards",
             "Id": "exsbe",
             "License": "MIT",
             "Name": "Exsbe",

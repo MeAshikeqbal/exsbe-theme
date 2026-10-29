@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=Lab
+Comment=Proxmox guests, SSH hosts and the Jellyfin library (Exsbe)
+Icon=network-server
+Type=Service
+X-KDE-PluginInfo-Author=Exsbe
+X-KDE-PluginInfo-Name=exsbe-lab
+X-KDE-PluginInfo-Version=1.0
+X-KDE-PluginInfo-License=MIT
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=DBus
+X-Plasma-DBusRunner-Service=org.exsbe.krunner
+X-Plasma-DBusRunner-Path=/runner
+X-Plasma-Request-Actions-Once=true
+X-Plasma-Runner-Syntaxes=:q:,pve :q:,ssh :q:,jf :q:
+X-Plasma-Runner-Syntax-Descriptions=Finds Proxmox guests named :q:,Finds Proxmox guests named :q:,Finds SSH hosts matching :q: and opens ssh in kitty,Searches the Jellyfin library for :q:

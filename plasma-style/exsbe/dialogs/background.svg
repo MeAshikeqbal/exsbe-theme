@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="405" height="70">
+<defs><style id="current-color-scheme" type="text/css">
+.ColorScheme-Background { color:#232326; }
+.ColorScheme-Text { color:#e6e6e8; }
+.ColorScheme-Highlight { color:#8fa4c0; }
+.ColorScheme-NegativeText { color:#e07a7a; }
+.ColorScheme-PositiveText { color:#8fc79a; }
+</style></defs>
+<g id="topleft"><rect x="0" y="0" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1" fill-rule="evenodd" d="M14,14 L0,14 A14,14 0 0 1 14,0 Z M14,14 L1,14 A13,13 0 0 1 14,1 Z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M14,14 L1,14 A13,13 0 0 1 14,1 Z"/></g>
+<g id="topright"><rect x="28" y="0" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1" fill-rule="evenodd" d="M28,14 L42,14 A14,14 0 0 0 28,0 Z M28,14 L41,14 A13,13 0 0 0 28,1 Z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M28,14 L41,14 A13,13 0 0 0 28,1 Z"/></g>
+<g id="bottomleft"><rect x="0" y="28" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1" fill-rule="evenodd" d="M14,28 L0,28 A14,14 0 0 0 14,42 Z M14,28 L1,28 A13,13 0 0 0 14,41 Z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M14,28 L1,28 A13,13 0 0 0 14,41 Z"/></g>
+<g id="bottomright"><rect x="28" y="28" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1" fill-rule="evenodd" d="M28,28 L42,28 A14,14 0 0 1 28,42 Z M28,28 L41,28 A13,13 0 0 1 28,41 Z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M28,28 L41,28 A13,13 0 0 1 28,41 Z"/></g>
+<g id="top"><rect x="14" y="0" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1"  d="M14,0h14v1h-14z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M14,1h14v13h-14z"/></g>
+<g id="bottom"><rect x="14" y="28" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1"  d="M14,41h14v1h-14z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M14,28h14v13h-14z"/></g>
+<g id="left"><rect x="0" y="14" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1"  d="M0,14h1v14h-1z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M1,14h13v14h-13z"/></g>
+<g id="right"><rect x="28" y="14" width="14" height="14" fill="none"/><path class="ColorScheme-Text" fill="currentColor" fill-opacity="0.1"  d="M41,14h1v14h-1z"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M28,14h13v14h-13z"/></g>
+<g id="center"><rect x="14" y="14" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="0.92"  d="M14,14h14v14h-14z"/></g>
+<g id="mask-topleft"><rect x="44" y="0" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M58,14 L45,14 A13,13 0 0 1 58,1 Z"/></g>
+<g id="mask-topright"><rect x="72" y="0" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M72,14 L85,14 A13,13 0 0 0 72,1 Z"/></g>
+<g id="mask-bottomleft"><rect x="44" y="28" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M58,28 L45,28 A13,13 0 0 0 58,41 Z"/></g>
+<g id="mask-bottomright"><rect x="72" y="28" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M72,28 L85,28 A13,13 0 0 1 72,41 Z"/></g>
+<g id="mask-top"><rect x="58" y="0" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M58,1h14v13h-14z"/></g>
+<g id="mask-bottom"><rect x="58" y="28" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M58,28h14v13h-14z"/></g>
+<g id="mask-left"><rect x="44" y="14" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M45,14h13v14h-13z"/></g>
+<g id="mask-right"><rect x="72" y="14" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M72,14h13v14h-13z"/></g>
+<g id="mask-center"><rect x="58" y="14" width="14" height="14" fill="none"/><path class="ColorScheme-Background" fill="currentColor" fill-opacity="1"  d="M58,14h14v14h-14z"/></g>
+<rect id="hint-top-margin" x="88" y="0" width="10" height="10" fill="none"/>
+<rect id="hint-bottom-margin" x="100" y="0" width="10" height="10" fill="none"/>
+<rect id="hint-left-margin" x="112" y="0" width="10" height="10" fill="none"/>
+<rect id="hint-right-margin" x="124" y="0" width="10" height="10" fill="none"/>
+<g transform="translate(136,46)"><defs><radialGradient id="sg-topleft" gradientUnits="userSpaceOnUse" cx="24" cy="24" r="24"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient><radialGradient id="sg-topright" gradientUnits="userSpaceOnUse" cx="26" cy="24" r="24"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient><radialGradient id="sg-bottomleft" gradientUnits="userSpaceOnUse" cx="76" cy="0" r="24"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient><radialGradient id="sg-bottomright" gradientUnits="userSpaceOnUse" cx="78" cy="0" r="24"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient><linearGradient id="sg-top" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient><linearGradient id="sg-bottom" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient><linearGradient id="sg-left" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient><linearGradient id="sg-right" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0.32"/><stop offset="0.45" stop-color="#000" stop-opacity="0.112"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient></defs>
+<rect id="shadow-topleft" x="0" y="0" width="24" height="24" fill="url(#sg-topleft)"/>
+<rect id="shadow-topright" x="26" y="0" width="24" height="24" fill="url(#sg-topright)"/>
+<rect id="shadow-bottomleft" x="52" y="0" width="24" height="24" fill="url(#sg-bottomleft)"/>
+<rect id="shadow-bottomright" x="78" y="0" width="24" height="24" fill="url(#sg-bottomright)"/>
+<rect id="shadow-top" x="104" y="0" width="1" height="24" fill="url(#sg-top)"/>
+<rect id="shadow-bottom" x="107" y="0" width="1" height="24" fill="url(#sg-bottom)"/>
+<rect id="shadow-left" x="110" y="0" width="24" height="1" fill="url(#sg-left)"/>
+<rect id="shadow-right" x="136" y="0" width="24" height="1" fill="url(#sg-right)"/>
+<rect id="shadow-center" x="162" y="0" width="1" height="1" fill="none"/>
+<rect id="shadow-hint-top-margin" x="165" y="0" width="24" height="24" fill="none"/>
+<rect id="shadow-hint-bottom-margin" x="191" y="0" width="24" height="24" fill="none"/>
+<rect id="shadow-hint-left-margin" x="217" y="0" width="24" height="24" fill="none"/>
+<rect id="shadow-hint-right-margin" x="243" y="0" width="24" height="24" fill="none"/></g>
+</svg>

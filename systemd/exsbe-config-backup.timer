@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly desktop config snapshot
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+OnStartupSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

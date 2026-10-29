@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""KRunner plugin (D-Bus runner org.exsbe.krunner): Lab from Alt+Space.
+
+  <name> / pve <name>    Proxmox guests: Enter opens a shell; actions: console, Proxmox page
+  ssh <host>             SSH hosts from ~/.ssh/config and config.d: Enter opens ssh in kitty
+  jf <title>             Jellyfin library search: Enter opens the item in Jellyfin
+
+Started on demand by D-Bus activation; exits after 10 minutes without a query.
+Guests come from `exsbe-pve status`, refreshed in the background every minute.
+"""
+import json, os, re, subprocess, threading, time, urllib.parse, urllib.request
+from pathlib import Path
+from gi.repository import Gio, GLib
+
+BUS, PATH, IFACE = "org.exsbe.krunner", "/runner", "org.kde.krunner1"
+BIN = Path.home() / ".local/bin"
+KITTY = next((k for k in ("/home/linuxbrew/.linuxbrew/bin/kitty", "/usr/bin/kitty") if os.path.exists(k)), "kitty")
+ENV = {**os.environ, "PATH": f"{BIN}:/home/linuxbrew/.linuxbrew/bin:{os.environ.get('PATH', '')}"}
+XML = """<node><interface name="org.kde.krunner1">
+ <method name="Actions"><arg type="a(sss)" direction="out"/></method>
+ <method name="Match"><arg name="query" type="s" direction="in"/><arg type="a(sssida{sv})" direction="out"/></method>
+ <method name="Run"><arg name="matchId" type="s" direction="in"/><arg name="actionId" type="s" direction="in"/></method>
+ <method name="Teardown"/>
+</interface></node>"""
+ACTIONS = [("console", "Console", "utilities-terminal"), ("web", "Open in Proxmox", "internet-web-browser")]
+IDLE_EXIT = 600
+
+
+def conf():
+    c = {}
+    p = Path.home() / ".config/exsbe/pve.conf"
+    if p.exists():
+        for line in p.read_text().splitlines():
+            k, _, v = line.partition("=")
+            if v and not line.lstrip().startswith("#"):
+                c[k.strip()] = v.strip()
+    return c
+
+
+def detach(cmd):
+    """Start a window in its own systemd scope (survives the runner exiting)."""
+    subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--collect", *cmd], env=ENV,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+class Runner:
+    def __init__(self):
+        self.guests, self.last_query = [], time.time()
+        self.jf_items = {}
+        threading.Thread(target=self.refresh_loop, daemon=True).start()
+
+    # --- data --------------------------------------------------------------------
+    def refresh_loop(self):
+        while True:
+            try:
+                out = subprocess.run(["exsbe-pve", "status"], capture_output=True, text=True, timeout=20, env=ENV).stdout
+                s = json.loads(out or "{}")
+                if "guests" in s:
+                    self.guests = [g for g in s["guests"] if not g["template"]]
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                pass
+            time.sleep(60)
+
+    @staticmethod
+    def ssh_hosts():
+        hosts = set()
+        for f in [Path.home() / ".ssh/config", *sorted((Path.home() / ".ssh/config.d").glob("*"))]:
+            try:
+                for line in f.read_text().splitlines():
+                    parts = line.split()
+                    if len(parts) > 1 and parts[0].lower() == "host":
+                        hosts.update(h for h in parts[1:] if not re.search(r"[*?!]", h))
+            except OSError:
+                pass
+        return sorted(hosts)
+
+    def jellyfin(self, term):
+        c = conf()
+        key = subprocess.run(["secret-tool", "lookup", "service", "exsbe-pve", "account", "jellyfin"],
+                             capture_output=True, text=True).stdout.strip()
+        server = c.get("jellyfin", "http://192.0.2.104:8096").rstrip("/")
+        if not key:
+            return []
+        q = urllib.parse.urlencode({"searchTerm": term, "Recursive": "true", "Limit": "8",
+                                    "IncludeItemTypes": "Movie,Series,Episode,MusicAlbum,Audio"})
+        req = urllib.request.Request(f"{server}/Items?{q}", headers={"Authorization": f'MediaBrowser Token="{key}"'})
+        try:
+            with urllib.request.urlopen(req, timeout=1.5) as r:
+                items = json.load(r).get("Items", [])
+        except (OSError, ValueError):
+            return []
+        web = c.get("jellyfin_web", server)
+        rows = []
+        for it in items:
+            sub = {"Episode": f'{it.get("SeriesName", "")} · S{it.get("ParentIndexNumber", 0)}E{it.get("IndexNumber", 0)}',
+                   "Series": f'Series · {it.get("ProductionYear", "")}', "Movie": f'Film · {it.get("ProductionYear", "")}',
+                   }.get(it.get("Type"), it.get("Type", ""))
+            self.jf_items[it["Id"]] = f'{web}/web/#/details?id={it["Id"]}&serverId={it.get("ServerId", "")}'
+            rows.append((f'jf:{it["Id"]}', it.get("Name", ""), "video-television", 100, 0.9, {"subtext": GLib.Variant("s", sub)}))
+        return rows
+
+    # --- krunner1 ----------------------------------------------------------------
+    def match(self, query):
+        self.last_query = time.time()
+        q = query.strip()
+        word, _, rest = q.partition(" ")
+        out = []
+        if word.lower() in ("jf", "jellyfin") and len(rest) >= 2:
+            return self.jellyfin(rest.strip())
+        if word.lower() == "ssh":
+            term = rest.strip().lower()
+            for h in self.ssh_hosts():
+                if term in h.lower():
+                    out.append((f"ssh:{h}", f"ssh {h}", "utilities-terminal", 100, 0.8 if term else 0.5,
+                                {"subtext": GLib.Variant("s", "SSH in kitty")}))
+            return out[:12]
+        term = rest.strip().lower() if word.lower() == "pve" else q.lower()
+        if len(term) < 2 and word.lower() != "pve":
+            return []
+        for g in self.guests:
+            name = g["name"].lower()
+            if term in name or term == str(g["vmid"]):
+                on = g["status"] == "running"
+                exact = name == term or name.startswith(term)
+                sub = (f'{"container" if g["type"] == "lxc" else "VM"} {g["vmid"]} on {g["node"]} · '
+                       + (f'running · cpu {g["cpu"] * 100:.0f}% · {g["mem"] / 2**30:.1f}G' if on else g["status"]))
+                out.append((f'pve:{g["vmid"]}', g["name"], "network-server" if on else "network-server-symbolic",
+                            100 if exact else 70, 0.95 if exact else 0.6, {"subtext": GLib.Variant("s", sub)}))
+        return out
+
+    def run(self, match_id, action):
+        kind, _, ident = match_id.partition(":")
+        if kind == "pve":
+            if action == "web":
+                detach(["exsbe-pve", "web", ident])
+            elif action == "console":
+                detach(["exsbe-pve", "console", ident])
+            else:  # Enter: a shell in a picker-sized kitty window, back to nothing when it ends
+                name = next((g["name"] for g in self.guests if str(g["vmid"]) == ident), ident)
+                detach([KITTY, "--title", name, "exsbe-pve", "connect", ident])
+        elif kind == "ssh":
+            detach([KITTY, "--title", ident, "ssh", ident])
+        elif kind == "jf" and ident in self.jf_items:
+            detach(["flatpak", "run", "com.brave.Browser", f"--app={self.jf_items[ident]}"])
+
+
+def main():
+    runner = Runner()
+    info = Gio.DBusNodeInfo.new_for_xml(XML)
+    loop = GLib.MainLoop()
+
+    def on_call(conn, sender, path, iface, method, params, inv):
+        try:
+            if method == "Match":
+                inv.return_value(GLib.Variant("(a(sssida{sv}))", (runner.match(params.unpack()[0]),)))
+            elif method == "Actions":
+                inv.return_value(GLib.Variant("(a(sss))", (ACTIONS,)))
+            elif method == "Run":
+                runner.run(*params.unpack())
+                inv.return_value(None)
+            else:
+                inv.return_value(None)
+        except Exception as e:  # never leave KRunner waiting
+            inv.return_dbus_error("org.exsbe.krunner.Error", str(e))
+
+    def on_bus(conn, name):
+        conn.register_object(PATH, info.interfaces[0], on_call, None, None)
+
+    Gio.bus_own_name(Gio.BusType.SESSION, BUS, Gio.BusNameOwnerFlags.NONE, on_bus, None, lambda *a: loop.quit())
+    GLib.timeout_add_seconds(60, lambda: (loop.quit() if time.time() - runner.last_query > IDLE_EXIT else True))
+    loop.run()
+
+
+if __name__ == "__main__":
+    main()

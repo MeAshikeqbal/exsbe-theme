@@ -1,0 +1,9 @@
+# Code workspace: two shells in ~/projects
+new_tab projects
+cd ~/projects
+launch --title projects
+
+new_tab git
+cd ~/projects
+launch --title git
+focus_tab 0

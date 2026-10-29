@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# The dock's terminal: kitty with the session for the current workspace, if there is one
+# (~/.config/kitty/sessions/<workspace>.kitty, e.g. code.kitty, lab.kitty); otherwise plain kitty.
+# With arguments it is plain kitty, so "open terminal here" style launches keep working.
+kitty=/home/linuxbrew/.linuxbrew/bin/kitty
+[ -x "$kitty" ] || kitty=kitty
+[ $# -gt 0 ] && exec "$kitty" "$@"
+vdm=(org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager)
+cur=$(busctl --user get-property "${vdm[@]}" current 2>/dev/null | cut -d'"' -f2)
+name=$(busctl --user --json=short get-property "${vdm[@]}" desktops 2>/dev/null |
+  python3 -c 'import json,sys; c=sys.argv[1]; print(next((d[2] for d in json.load(sys.stdin)["data"] if d[1]==c), ""))' "$cur" 2>/dev/null)
+session=~/.config/kitty/sessions/${name,,}.kitty
+[ -n "$name" ] && [ -f "$session" ] && exec "$kitty" --session "$session"
+exec "$kitty"

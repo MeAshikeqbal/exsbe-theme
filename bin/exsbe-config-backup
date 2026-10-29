@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Nightly snapshot of the desktop config (Plasma, KWin, shortcuts, theme, terminal, tools) into a
+# local git repository, so any change can be undone. Nothing leaves this machine; no keys or
+# secrets are copied (no ~/.ssh keys, no KWallet, no tokens).
+#
+#   exsbe-config-backup              take a snapshot now (commits only when something changed)
+#   exsbe-config-backup log          list snapshots
+#   exsbe-config-backup diff [REV]   what changed since REV (default: the previous snapshot)
+#   exsbe-config-backup restore REV  put the config of snapshot REV back (stops plasmashell meanwhile)
+set -euo pipefail
+repo=${EXSBE_BACKUP_DIR:-$HOME/.local/share/exsbe/config-backup}
+cd "$HOME"
+paths=(
+  .config/{kdeglobals,kwinrc,kwinrulesrc,plasma-org.kde.plasma.desktop-appletsrc,plasmashellrc,plasmarc}
+  .config/{kglobalshortcutsrc,breezerc,krunnerrc,plasmanotifyrc,kscreenlockerrc,ksplashrc,klipperrc}
+  .config/{kcminputrc,kxkbrc,dolphinrc,konsolerc,katerc,powerdevilrc,powermanagementprofilesrc}
+  .config/{spectaclerc,kactivitymanagerdrc,starship.toml}
+  .config/{kitty,btop,fastfetch,lazygit,MangoHud,exsbe,gtk-3.0,gtk-4.0,systemd/user}
+  .config/Code/User/settings.json
+  .local/share/applications .local/share/konsole .local/share/color-schemes
+  .zshrc .ssh/config .ssh/config.d
+)
+
+git_() { git -C "$repo" "$@"; }
+
+snapshot() {
+  mkdir -p "$repo"
+  [ -d "$repo/.git" ] || { git init -q "$repo"; git_ config user.name "exsbe-config-backup"; git_ config user.email "backup@localhost"; }
+  local p
+  for p in "${paths[@]}"; do
+    [ -e "$p" ] || continue
+    mkdir -p "$repo/$(dirname "$p")"
+    # --delete keeps removed files out of later snapshots; *.bak* and caches are noise
+    rsync -a --delete --exclude='*.bak*' --exclude='*.kcache' --exclude='__pycache__' "$p" "$repo/$(dirname "$p")/"
+  done
+  git_ add -A
+  if git_ diff --cached --quiet; then
+    echo "no changes since the last snapshot"
+  else
+    git_ commit -q -m "snapshot $(date '+%Y-%m-%d %H:%M')" && echo "snapshot $(git_ rev-parse --short HEAD)"
+  fi
+}
+
+case "${1:-snapshot}" in
+  snapshot) snapshot ;;
+  log) git_ log --format='%h  %ad  %s  (%N)' --date=format:'%Y-%m-%d %H:%M' --stat=60 | grep -v '^$' | head -80 ;;
+  diff) git_ diff --stat "${2:-HEAD~1}" HEAD ;;
+  restore)
+    rev=${2:?usage: exsbe-config-backup restore REV}
+    git_ rev-parse --verify -q "$rev^{commit}" >/dev/null || { echo "no snapshot $rev" >&2; exit 1; }
+    snapshot >/dev/null   # keep the current state, so a restore can itself be undone
+    echo "restoring $rev (current state saved as $(git_ rev-parse --short HEAD))"
+    systemctl --user stop plasma-plasmashell.service
+    git_ archive "$rev" | tar -x -C "$HOME"
+    systemctl --user start plasma-plasmashell.service
+    busctl --user call org.kde.KWin /KWin org.kde.KWin reconfigure >/dev/null 2>&1 || true
+    echo "restored; log out and back in for everything to apply" ;;
+  *) sed -n '2,10p' "$0"; exit 1 ;;
+esac

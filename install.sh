@@ -121,6 +121,15 @@ apps() {
   touch ~/.config/kitty/kitty.conf
   grep -qx 'include exsbe.conf' ~/.config/kitty/kitty.conf || echo 'include exsbe.conf' >> ~/.config/kitty/kitty.conf
   pkill -USR1 -x kitty || true   # live reload
+  # per-workspace sessions (Code, Lab); the dock's kitty opens the one for the current workspace
+  install -Dm644 -t ~/.config/kitty/sessions "$HERE"/kitty/sessions/*.kitty
+  install -Dm755 "$HERE/bin/exsbe-term" ~/.local/bin/exsbe-term
+  [ -f ~/.local/share/applications/kitty.desktop ] &&
+    sed -i "s|^Exec=.*kitty %U$|Exec=$HOME/.local/bin/exsbe-term|" ~/.local/share/applications/kitty.desktop
+
+  # MangoHud: Exsbe overlay, loaded in every Vulkan game but hidden until Right Shift+F12
+  install -Dm644 "$HERE/mangohud/MangoHud.conf" ~/.config/MangoHud/MangoHud.conf
+  install -Dm644 "$HERE/mangohud/environment.conf" ~/.config/environment.d/exsbe-mangohud.conf
 
   # CLI colours (fzf, bat, eza, zsh highlighting) + fastfetch greeting, sourced from .zshrc
   install -Dm644 "$HERE/shell/exsbe.zsh" ~/.config/exsbe/exsbe.zsh
@@ -240,6 +249,12 @@ workflow() {
   busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting unloadScript s exsbe-gamemode >/dev/null
   busctl --user call org.kde.KWin /Scripting org.kde.kwin.Scripting start >/dev/null
 
+  # nightly config snapshot into a local git repo (exsbe-config-backup log / restore REV)
+  install -Dm755 "$HERE/bin/exsbe-config-backup" ~/.local/bin/exsbe-config-backup
+  install -Dm644 -t ~/.config/systemd/user "$HERE/systemd/exsbe-config-backup.service" "$HERE/systemd/exsbe-config-backup.timer"
+  systemctl --user daemon-reload
+  systemctl --user enable --now exsbe-config-backup.timer
+
   # SSH host picker, Meta+Shift+H
   install -Dm755 "$HERE/bin/sshpick" ~/.local/bin/sshpick
   local kitty; kitty="$(command -v kitty || echo /home/linuxbrew/.linuxbrew/bin/kitty)"
@@ -326,6 +341,12 @@ lab() {
   install -Dm755 "$HERE/bin/exsbe-secret" ~/.local/bin/exsbe-secret
   install -Dm755 "$HERE/bin/exsbe-jellyfin" ~/.local/bin/exsbe-jellyfin
   install -Dm755 "$HERE/bin/exsbe-tailnet-routes" ~/.local/bin/exsbe-tailnet-routes
+  install -Dm755 "$HERE/bin/exsbe-pve-keys" ~/.local/bin/exsbe-pve-keys   # run once: keys into containers
+  # KRunner (Alt+Space): Proxmox guests, ssh hosts, Jellyfin library; started on demand over D-Bus
+  install -Dm755 "$HERE/bin/exsbe-krunner" ~/.local/bin/exsbe-krunner
+  install -Dm644 "$HERE/krunner/exsbe.desktop" ~/.local/share/krunner/dbusplugins/exsbe.desktop
+  mkdir -p ~/.local/share/dbus-1/services
+  sed "s|@HOME@|$HOME|" "$HERE/krunner/org.exsbe.krunner.service" > ~/.local/share/dbus-1/services/org.exsbe.krunner.service
   [ -f ~/.config/exsbe/pve.conf ] || install -Dm644 "$HERE/lab/pve.conf" ~/.config/exsbe/pve.conf
   local kitty d; kitty="$(command -v kitty || echo /home/linuxbrew/.linuxbrew/bin/kitty)"
   for d in pvepick proxmox; do

@@ -1,0 +1,6 @@
+[Unit]
+Description=Snapshot the desktop config into a local git repository
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/exsbe-config-backup

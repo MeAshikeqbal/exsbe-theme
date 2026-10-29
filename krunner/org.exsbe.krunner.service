@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.exsbe.krunner
+Exec=@HOME@/.local/bin/exsbe-krunner

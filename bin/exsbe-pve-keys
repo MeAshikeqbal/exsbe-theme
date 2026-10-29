@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Put this PC's SSH key into every running Proxmox container that runs sshd, and record each
+# container's host key in ~/.ssh/known_hosts. Host keys are read through Proxmox (pct exec over
+# root SSH to the node), not from the network, so they are the real ones. Containers without
+# sshd are listed and left alone (the guest picker reaches them with pct enter).
+# Usage: exsbe-pve-keys        (safe to re-run; only adds what is missing)
+set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
+pub=$(cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub)
+declare -A node_ip
+while IFS=$'\t' read -r name ip; do node_ip[$name]=$ip; done < <(
+  awk '/^Host /{h=$2} /HostName/{print h "\t" $2}' ~/.ssh/config.d/exsbe-pve | grep -E '^pve(-[0-9]+)?\b')
+touch ~/.ssh/known_hosts
+
+exsbe-pve list | while IFS=$'\t' read -r id name state kind node ip; do
+  [ "$kind" = ct ] && [ "$state" = running ] || continue
+  printf '%-16s ' "$name"
+  out=$(ssh -n -o BatchMode=yes "root@${node_ip[$node]}" "pct exec $id -- sh -c '
+    command -v sshd >/dev/null 2>&1 || [ -x /usr/sbin/sshd ] || { echo NOSSHD; exit 0; }
+    mkdir -p /root/.ssh && chmod 700 /root/.ssh && touch /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+    grep -qxF \"$pub\" /root/.ssh/authorized_keys && echo KEY-PRESENT || { echo \"$pub\" >> /root/.ssh/authorized_keys; echo KEY-ADDED; }
+    cat /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null || cat /etc/ssh/ssh_host_rsa_key.pub'" 2>&1) || { echo "failed: $out"; continue; }
+  case $out in
+    NOSSHD*) echo "no sshd (use the picker: pct enter)"; continue ;;
+  esac
+  status=$(head -1 <<<"$out")
+  hostkey=$(sed -n 2p <<<"$out" | awk '{print $1, $2}')
+  if [ -n "$hostkey" ] && [ -n "$ip" ]; then
+    ssh-keygen -R "$name" >/dev/null 2>&1 || true; ssh-keygen -R "$ip" >/dev/null 2>&1 || true
+    echo "$name,$ip $hostkey" >> ~/.ssh/known_hosts
+  fi
+  echo "${status,,}, host key recorded"
+done

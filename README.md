@@ -38,6 +38,11 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `plasmoid/com.exsbe.jellyfin`, `bin/exsbe-jellyfin` | Jellyfin widget: every user's streams, direct play vs transcode (codecs, reasons, GPU), and where they play from (LAN device, Tailscale, city/ISP) |
 | `bin/exsbe-tailnet-routes` | uses the `tailscale-router` Tailscale route (CT 112, proxy `192.0.2.101/32` only) only when away from home |
 | `bin/exsbe-secret` | store an API key in KWallet without echo (`exsbe-secret jellyfin`) |
+| `bin/exsbe-krunner`, `krunner/` | KRunner plugin: Proxmox guests (`jelly`, `pve …`), `ssh …` hosts, `jf …` Jellyfin library |
+| `bin/exsbe-pve-keys` | put this PC's SSH key into every container with sshd; host keys read through Proxmox |
+| `bin/exsbe-config-backup` | nightly snapshot of the desktop config into a local git repo; `log`, `diff`, `restore REV` |
+| `bin/exsbe-term`, `kitty/sessions/` | the dock's terminal: tabs per workspace (Code: ~/projects; Lab: shell, btop, pve) |
+| `mangohud/` | Exsbe MangoHud overlay for every Vulkan game, hidden until Right Shift+F12 |
 | `kwin/exsbe-gamemode` | Play workspace: blur off, dock hidden, Do Not Disturb |
 | `look-and-feel/com.exsbe.desktop` | login splash + one-click global theme |
 | `konsole/`, `kitty/`, `btop/`, `lazygit/`, `lazydocker/`, `bin/` | app themes and helper scripts |

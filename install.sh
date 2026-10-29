@@ -186,7 +186,7 @@ splash() {
 
 layout() {
   local pkg
-  for pkg in com.exsbe.workspaces com.exsbe.sysmon; do
+  for pkg in com.exsbe.workspaces com.exsbe.sysmon com.exsbe.weather com.exsbe.network; do
     kpackagetool6 -t Plasma/Applet -u "$HERE/plasmoid/$pkg" >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i "$HERE/plasmoid/$pkg"
   done
   install -Dm644 "$HERE/icons/exsbe.png" ~/.local/share/exsbe/exsbe.png

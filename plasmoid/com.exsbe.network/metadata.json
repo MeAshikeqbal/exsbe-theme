@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "System Information",
+        "Description": "Download and upload rate with a one-minute graph and session totals, in the Exsbe card style",
+        "Icon": "network-wired-symbolic",
+        "Id": "com.exsbe.network",
+        "License": "MIT",
+        "Name": "Network",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

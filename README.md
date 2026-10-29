@@ -30,6 +30,7 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `layout.js` | top bar + auto-hiding dock |
 | `plasmoid/com.exsbe.workspaces` | icon workspace switcher (Code / Web / Lab / Play) |
 | `plasmoid/com.exsbe.sysmon` | top-bar CPU / RAM / GPU chips (fixed width; GPU dims when idle); popup with 1-minute graphs, temps, clocks, fans, VRAM and top processes |
+| `plasmoid/com.exsbe.weather`, `plasmoid/com.exsbe.network` | desktop cards: weather + 7-day forecast (Open-Meteo, no key), network rates with a one-minute graph |
 | `plasmoid/com.exsbe.containers` | Podman / distrobox panel widget |
 | `plasmoid/com.exsbe.proxmox` | Proxmox panel widget: nodes, storage, backups, guests (start / shut down / console / ssh) |
 | `bin/exsbe-pve`, `bin/pvepick` | Proxmox CLI (status, actions, consoles, ssh-config, alerts) and the fzf guest picker |

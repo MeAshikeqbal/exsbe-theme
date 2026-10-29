@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "Environment and Weather",
+        "Description": "Current weather and a 7-day forecast (Open-Meteo), in the Exsbe card style",
+        "Icon": "weather-few-clouds-symbolic",
+        "Id": "com.exsbe.weather",
+        "License": "MIT",
+        "Name": "Weather",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

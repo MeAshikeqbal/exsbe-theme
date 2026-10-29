@@ -15,7 +15,7 @@ PlasmoidItem {
     readonly property string env: "PATH=\"$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH\" "
     readonly property string pollCmd: "podman ps -a --format json; echo '@@PODS@@'; podman pod ps --format json"
 
-    property var containers: []
+    ListModel { id: containerModel }
     property int running: 0
     property int stopped: 0
     property int problems: 0
@@ -31,6 +31,19 @@ PlasmoidItem {
     preferredRepresentation: compactRepresentation
 
     function shq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }
+
+    // update the list in place so it keeps its scroll position; rebuild only when the rows change
+    function sync(model, rows) {
+        let same = model.count === rows.length
+        for (let i = 0; same && i < rows.length; i++)
+            same = model.get(i).key === rows[i].key
+        if (!same) {
+            model.clear()
+            for (const r of rows) model.append(r)
+        } else {
+            for (let i = 0; i < rows.length; i++) model.set(i, rows[i])
+        }
+    }
 
     function parse(stdout) {
         const parts = stdout.split("@@PODS@@")
@@ -73,7 +86,7 @@ PlasmoidItem {
             if ((a.state === "running") !== (b.state === "running")) return a.state === "running" ? -1 : 1
             return a.name < b.name ? -1 : 1
         })
-        containers = rows
+        sync(containerModel, rows.map(x => Object.assign({ key: x.cid }, x)))
         running = r; stopped = s; problems = p; starting = st
     }
 
@@ -184,7 +197,7 @@ PlasmoidItem {
 
             ListView {
                 id: list
-                model: root.containers
+                model: containerModel
                 clip: true
                 spacing: 0
                 section.property: "group"
@@ -205,8 +218,8 @@ PlasmoidItem {
 
                 delegate: PlasmaComponents3.ItemDelegate {
                     id: item
-                    required property var modelData
-                    readonly property bool up: modelData.state === "running"
+                    required property var model
+                    readonly property bool up: model.state === "running"
                     width: ListView.view.width
                     hoverEnabled: true
 
@@ -217,8 +230,8 @@ PlasmoidItem {
                             width: Kirigami.Units.smallSpacing * 2
                             height: width
                             radius: width / 2
-                            color: item.modelData.bad ? Kirigami.Theme.negativeTextColor
-                                 : item.modelData.warming ? Kirigami.Theme.neutralTextColor
+                            color: item.model.bad ? Kirigami.Theme.negativeTextColor
+                                 : item.model.warming ? Kirigami.Theme.neutralTextColor
                                  : item.up ? Kirigami.Theme.positiveTextColor
                                  : Kirigami.Theme.disabledTextColor
                         }
@@ -227,13 +240,13 @@ PlasmoidItem {
                             spacing: 0
                             Layout.fillWidth: true
                             PlasmaComponents3.Label {
-                                text: item.modelData.name
+                                text: item.model.name
                                 font.weight: Font.DemiBold
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                             PlasmaComponents3.Label {
-                                text: [item.modelData.image, item.modelData.status, item.modelData.ports]
+                                text: [item.model.image, item.model.status, item.model.ports]
                                       .filter(x => x).join("  ·  ")
                                 font: Kirigami.Theme.smallFont
                                 opacity: 0.65
@@ -254,31 +267,31 @@ PlasmoidItem {
                             icon.name: "view-refresh"
                             PlasmaComponents3.ToolTip.text: "Restart"
                             PlasmaComponents3.ToolTip.visible: hovered
-                            onClicked: root.run("podman restart " + root.shq(item.modelData.cid))
+                            onClicked: root.run("podman restart " + root.shq(item.model.cid))
                         }
                         PlasmaComponents3.ToolButton {
                             visible: item.hovered
                             icon.name: "utilities-terminal"
-                            PlasmaComponents3.ToolTip.text: item.modelData.isBox ? "Enter" : "Shell"
+                            PlasmaComponents3.ToolTip.text: item.model.isBox ? "Enter" : "Shell"
                             PlasmaComponents3.ToolTip.visible: hovered
-                            enabled: item.modelData.isBox || item.up
-                            onClicked: root.terminal(item.modelData.name, item.modelData.isBox
-                                ? "distrobox enter " + root.shq(item.modelData.name)
-                                : "podman exec -it " + root.shq(item.modelData.cid) + " sh")
+                            enabled: item.model.isBox || item.up
+                            onClicked: root.terminal(item.model.name, item.model.isBox
+                                ? "distrobox enter " + root.shq(item.model.name)
+                                : "podman exec -it " + root.shq(item.model.cid) + " sh")
                         }
                         PlasmaComponents3.ToolButton {
-                            visible: item.hovered && !item.modelData.isBox
+                            visible: item.hovered && !item.model.isBox
                             icon.name: "view-list-text"
                             PlasmaComponents3.ToolTip.text: "Logs"
                             PlasmaComponents3.ToolTip.visible: hovered
-                            onClicked: root.terminal(item.modelData.name + " logs",
-                                "--hold podman logs -f --tail 200 " + root.shq(item.modelData.cid))
+                            onClicked: root.terminal(item.model.name + " logs",
+                                "--hold podman logs -f --tail 200 " + root.shq(item.model.cid))
                         }
                     }
 
                     function lifecycle(verb) {
                         // podman stop works for distroboxes too and, unlike distrobox stop, never prompts
-                        return "podman " + verb + " " + root.shq(modelData.cid)
+                        return "podman " + verb + " " + root.shq(model.cid)
                     }
                 }
             }

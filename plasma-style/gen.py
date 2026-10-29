@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Generate the Exsbe Plasma style: rounded task-manager and pager SVGs.
 
-Only widgets/tasks.svg and widgets/pager.svg are provided; every other
+Only the dock items (widgets/tasks.svg), the pager (widgets/pager.svg) and the desktop
+widget card (widgets/background.svg, translucentbackground.svg) are provided; every other
 element falls back to the Breeze ("default") Plasma style.
 Colors come from the active color scheme through the ColorScheme-* classes.
 """
@@ -11,6 +12,7 @@ import pathlib
 OUT = pathlib.Path(__file__).resolve().parent / "exsbe"
 
 STYLE = """<style id="current-color-scheme" type="text/css">
+.ColorScheme-Background { color:#232326; }
 .ColorScheme-Text { color:#e6e6e8; }
 .ColorScheme-Highlight { color:#8fa4c0; }
 .ColorScheme-NegativeText { color:#e07a7a; }
@@ -55,7 +57,7 @@ def frame(prefix, x0, r, fill=None, border=None):
         "right": (bounds(c, m, r, r), paint(border, f"M{c+r-1},{m}h1v{r}h-1z") + paint(fill, f"M{c},{m}h{r-1}v{r}h-{r-1}z")),
         "center": (bounds(b, m, r, r), paint(fill, f"M{b},{m}h{r}v{r}h-{r}z")),
     }
-    return "\n".join(f'<g id="{prefix}-{k}">{bx}{body}</g>' for k, (bx, body) in pieces.items())
+    return "\n".join(f'<g id="{prefix + "-" if prefix else ""}{k}">{bx}{body}</g>' for k, (bx, body) in pieces.items())
 
 
 def svg(groups, width, height):
@@ -99,14 +101,25 @@ def pager():
     return svg(groups, x, 3 * r)
 
 
+def card(opacity):
+    """Desktop widget background: the same card as the Lab dashboard (18px radius, hairline border)."""
+    r, pad = 18, 12
+    groups = [frame("", 0, r, ("ColorScheme-Background", opacity), ("ColorScheme-Text", 0.08))]
+    for i, side in enumerate(("top", "bottom", "left", "right")):
+        groups.append(f'<rect id="hint-{side}-margin" x="{3 * r + 2 + i * (pad + 2)}" y="0" width="{pad}" height="{pad}" fill="none"/>')
+    return svg(groups, 3 * r + 2 + 4 * (pad + 2), 3 * r)
+
+
 def main():
     (OUT / "widgets").mkdir(parents=True, exist_ok=True)
     (OUT / "widgets/tasks.svg").write_text(tasks())
     (OUT / "widgets/pager.svg").write_text(pager())
+    (OUT / "widgets/background.svg").write_text(card(0.92))
+    (OUT / "widgets/translucentbackground.svg").write_text(card(0.75))
     (OUT / "metadata.json").write_text(json.dumps({
         "KPlugin": {
             "Authors": [{"Name": "Exsbe"}],
-            "Description": "Breeze with rounded dock items and desktop pager",
+            "Description": "Breeze with rounded dock items, desktop pager and widget cards",
             "Id": "exsbe",
             "License": "MIT",
             "Name": "Exsbe",

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the "Exsbe" icon theme: WhiteSur-dark with its blue folder/places icons recoloured
-# to the Exsbe graphite accent. Everything else is inherited from WhiteSur-dark.
+# to the Exsbe graphite accent, graphite dock tiles and a few symbolic glyphs (gen-apps.py).
+# Everything else is inherited from WhiteSur-dark.
 # Usage: gen-folders.sh [SRC_THEME_DIR] [OUT_THEME_DIR]
 set -euo pipefail
 src=${1:-$HOME/.local/share/icons/WhiteSur-dark}
@@ -19,6 +20,9 @@ for d in "${dirs[@]}"; do
   done
 done
 
+python3 "$(dirname "$0")/gen-apps.py" "$out" >/dev/null
+dirs+=(apps/scalable status/symbolic)
+
 {
   echo "[Icon Theme]"
   echo "Name=Exsbe"
@@ -28,11 +32,13 @@ done
   echo "Directories=$(IFS=,; echo "${dirs[*]}")"
   for d in "${dirs[@]}"; do
     echo; echo "[$d]"
-    if [[ $d == */scalable ]]; then
-      echo "Size=64"; echo "MinSize=16"; echo "MaxSize=512"; echo "Type=Scalable"
-    else
-      echo "Size=${d#*/}"; echo "Type=Fixed"
-    fi
-    echo "Context=Places"
+    case $d in
+      */scalable) echo "Size=64"; echo "MinSize=16"; echo "MaxSize=512"; echo "Type=Scalable" ;;
+      */symbolic) echo "Size=16"; echo "MinSize=8"; echo "MaxSize=512"; echo "Type=Scalable" ;;
+      *)          echo "Size=${d#*/}"; echo "Type=Fixed" ;;
+    esac
+    case $d in
+      apps/*) echo "Context=Applications" ;; status/*) echo "Context=Status" ;; *) echo "Context=Places" ;;
+    esac
   done
 } > "$out/index.theme"

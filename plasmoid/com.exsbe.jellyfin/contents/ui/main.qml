@@ -95,7 +95,7 @@ PlasmoidItem {
         onNewData: (source) => disconnectSource(source)
     }
     function refresh() { poller.connectSource(env + "exsbe-jellyfin status") }
-    function run(cmd) { runner.connectSource(env + "setsid -f " + cmd + " >/dev/null 2>&1") }
+    function run(cmd) { runner.connectSource(env + "systemd-run --user --scope --quiet --collect setsid -f " + cmd + " >/dev/null 2>&1") }
 
     Timer {
         interval: root.expanded ? 3000 : 15000
@@ -106,30 +106,22 @@ PlasmoidItem {
     }
 
     compactRepresentation: MouseArea {
-        Layout.minimumWidth: row.implicitWidth + Kirigami.Units.smallSpacing * 2
+        Layout.minimumWidth: chips.implicitWidth + Kirigami.Units.smallSpacing * 2
         Layout.preferredWidth: Layout.minimumWidth
         hoverEnabled: true
         onClicked: root.expanded = !root.expanded
 
-        readonly property color tint: root.error !== "" ? Kirigami.Theme.disabledTextColor
-            : root.transcoding > 0 ? Kirigami.Theme.neutralTextColor
-            : root.playing > 0 ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
-
         RowLayout {
-            id: row
+            id: chips
             anchors.centerIn: parent
-            spacing: Kirigami.Units.smallSpacing
-            Kirigami.Icon {
-                source: "video-television"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                color: parent.parent.tint
-                isMask: true
-            }
-            PlasmaComponents3.Label {
-                visible: root.playing > 0
-                text: root.playing + " ▶"
-                color: parent.parent.tint
+            spacing: Kirigami.Units.largeSpacing
+            Chip {
+                icon: "video-television-symbolic"
+                opacity: root.error !== "" || root.playing === 0 ? 0.45 : 1
+                value: root.error !== "" ? "–" : String(root.playing)
+                valueColor: root.transcoding > 0 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.textColor
+                detail: root.transcoding > 0 ? root.transcoding + " tc" : ""
+                detailColor: Kirigami.Theme.neutralTextColor
             }
         }
     }
@@ -361,6 +353,43 @@ PlasmoidItem {
                     }
                 }
             }
+        }
+    }
+
+    // top-bar chip, shared look across the Exsbe widgets: icon · value · dim detail.
+    // widest* reserve room so the bar never shifts as numbers change.
+    component Chip: RowLayout {
+        property string icon
+        property string value
+        property string detail: ""
+        property color valueColor: Kirigami.Theme.textColor
+        property color detailColor: Kirigami.Theme.textColor
+        property string widestValue: ""
+        property string widestDetail: ""
+        spacing: 4
+        Kirigami.Icon {
+            source: icon
+            isMask: true
+            color: Kirigami.Theme.textColor
+            opacity: 0.7
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+        }
+        PlasmaComponents3.Label {
+            text: value
+            color: valueColor
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestValue ? valueMetrics.width : 0
+            TextMetrics { id: valueMetrics; text: widestValue; font.features: { "tnum": 1 } }
+        }
+        PlasmaComponents3.Label {
+            visible: detail !== "" || widestDetail !== ""
+            text: detail
+            color: detailColor
+            opacity: detailColor === Kirigami.Theme.textColor ? 0.5 : 1
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestDetail ? detailMetrics.width : 0
+            TextMetrics { id: detailMetrics; text: widestDetail; font.features: { "tnum": 1 } }
         }
     }
 }

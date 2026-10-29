@@ -114,7 +114,7 @@ PlasmoidItem {
 
     function refresh() { poller.connectSource(env + pollCmd) }
     function run(cmd) { runner.connectSource(env + cmd) }
-    function detach(cmd) { run("setsid -f " + cmd + " >/dev/null 2>&1") }
+    function detach(cmd) { run("systemd-run --user --scope --quiet --collect setsid -f " + cmd + " >/dev/null 2>&1") }
 
     Timer {
         interval: root.expanded ? 5000 : 30000
@@ -125,33 +125,22 @@ PlasmoidItem {
     }
 
     compactRepresentation: MouseArea {
-        Layout.minimumWidth: row.implicitWidth + Kirigami.Units.smallSpacing * 2
+        Layout.minimumWidth: chips.implicitWidth + Kirigami.Units.smallSpacing * 2
         Layout.preferredWidth: Layout.minimumWidth
         hoverEnabled: true
         onClicked: root.expanded = !root.expanded
 
-        readonly property color tint: root.error !== "" ? Kirigami.Theme.disabledTextColor
-            : root.problems > 0 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
-
         RowLayout {
-            id: row
+            id: chips
             anchors.centerIn: parent
-            spacing: Kirigami.Units.smallSpacing
-            Kirigami.Icon {
-                source: "network-server"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                color: parent.parent.tint
-                isMask: true
-            }
-            PlasmaComponents3.Label {
-                text: root.error !== "" ? "–" : root.guestsUp + " ▲"
-                color: parent.parent.tint
-            }
-            PlasmaComponents3.Label {
-                visible: root.problems > 0 && root.error === ""
-                text: root.problems + " !"
-                color: Kirigami.Theme.negativeTextColor
+            spacing: Kirigami.Units.largeSpacing
+            Chip {
+                icon: "network-server-symbolic"
+                opacity: root.error !== "" ? 0.45 : 1
+                value: root.error !== "" ? "–" : String(root.guestsUp)
+                valueColor: root.problems > 0 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                detail: root.error !== "" ? "" : root.problems > 0 ? root.problems + " !" : "/" + root.snap.guests.length
+                detailColor: root.problems > 0 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
             }
         }
     }
@@ -327,6 +316,43 @@ PlasmoidItem {
                     }
                 }
             }
+        }
+    }
+
+    // top-bar chip, shared look across the Exsbe widgets: icon · value · dim detail.
+    // widest* reserve room so the bar never shifts as numbers change.
+    component Chip: RowLayout {
+        property string icon
+        property string value
+        property string detail: ""
+        property color valueColor: Kirigami.Theme.textColor
+        property color detailColor: Kirigami.Theme.textColor
+        property string widestValue: ""
+        property string widestDetail: ""
+        spacing: 4
+        Kirigami.Icon {
+            source: icon
+            isMask: true
+            color: Kirigami.Theme.textColor
+            opacity: 0.7
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+        }
+        PlasmaComponents3.Label {
+            text: value
+            color: valueColor
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestValue ? valueMetrics.width : 0
+            TextMetrics { id: valueMetrics; text: widestValue; font.features: { "tnum": 1 } }
+        }
+        PlasmaComponents3.Label {
+            visible: detail !== "" || widestDetail !== ""
+            text: detail
+            color: detailColor
+            opacity: detailColor === Kirigami.Theme.textColor ? 0.5 : 1
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestDetail ? detailMetrics.width : 0
+            TextMetrics { id: detailMetrics; text: widestDetail; font.features: { "tnum": 1 } }
         }
     }
 }

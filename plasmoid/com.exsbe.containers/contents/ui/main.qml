@@ -112,7 +112,10 @@ PlasmoidItem {
 
     function refresh() { poller.connectSource(env + pollCmd) }
     function run(cmd) { runner.connectSource(env + cmd) }
-    function terminal(title, cmd) { run("setsid -f kitty --title " + shq(title) + " " + cmd + " >/dev/null 2>&1") }
+    // a container's conmon stays in the cgroup of whoever started it; give it its own scope
+    // so restarting plasmashell (or closing a terminal) doesn't stop the container
+    function scoped(cmd) { return "systemd-run --user --scope --quiet --collect " + cmd }
+    function terminal(title, cmd) { run("systemd-run --user --scope --quiet --collect setsid -f kitty --title " + shq(title) + " " + cmd + " >/dev/null 2>&1") }
 
     Timer {
         interval: root.expanded ? 3000 : 10000
@@ -123,36 +126,22 @@ PlasmoidItem {
     }
 
     compactRepresentation: MouseArea {
-        Layout.minimumWidth: row.implicitWidth + Kirigami.Units.smallSpacing * 2
+        Layout.minimumWidth: chips.implicitWidth + Kirigami.Units.smallSpacing * 2
         Layout.preferredWidth: Layout.minimumWidth
         hoverEnabled: true
         onClicked: root.expanded = !root.expanded
 
-        readonly property color tint: root.problems > 0 ? Kirigami.Theme.negativeTextColor
-            : root.starting > 0 ? Kirigami.Theme.highlightColor
-            : Kirigami.Theme.textColor
-
         RowLayout {
-            id: row
+            id: chips
             anchors.centerIn: parent
-            spacing: Kirigami.Units.smallSpacing
-            Kirigami.Icon {
-                source: "package-x-generic"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                color: parent.parent.tint
-                isMask: true
-            }
-            PlasmaComponents3.Label {
-                text: root.running + " ▲"
-                color: parent.parent.tint
-                opacity: root.running > 0 || root.problems > 0 ? 1 : 0.6
-            }
-            PlasmaComponents3.Label {
-                visible: root.stopped > 0
-                text: root.stopped + " ▼"
-                color: root.problems > 0 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
-                opacity: root.problems > 0 ? 1 : 0.5
+            spacing: Kirigami.Units.largeSpacing
+            Chip {
+                icon: "package-x-generic-symbolic"
+                value: String(root.running)
+                valueColor: root.problems > 0 ? Kirigami.Theme.negativeTextColor
+                    : root.starting > 0 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.textColor
+                detail: root.problems > 0 ? root.problems + " !" : "/" + (root.running + root.stopped)
+                detailColor: root.problems > 0 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
             }
         }
     }
@@ -267,7 +256,7 @@ PlasmoidItem {
                             icon.name: "view-refresh"
                             PlasmaComponents3.ToolTip.text: "Restart"
                             PlasmaComponents3.ToolTip.visible: hovered
-                            onClicked: root.run("podman restart " + root.shq(item.model.cid))
+                            onClicked: root.run(root.scoped("podman restart " + root.shq(item.model.cid)))
                         }
                         PlasmaComponents3.ToolButton {
                             visible: item.hovered
@@ -291,10 +280,47 @@ PlasmoidItem {
 
                     function lifecycle(verb) {
                         // podman stop works for distroboxes too and, unlike distrobox stop, never prompts
-                        return "podman " + verb + " " + root.shq(model.cid)
+                        return root.scoped("podman " + verb + " " + root.shq(model.cid))
                     }
                 }
             }
+        }
+    }
+
+    // top-bar chip, shared look across the Exsbe widgets: icon · value · dim detail.
+    // widest* reserve room so the bar never shifts as numbers change.
+    component Chip: RowLayout {
+        property string icon
+        property string value
+        property string detail: ""
+        property color valueColor: Kirigami.Theme.textColor
+        property color detailColor: Kirigami.Theme.textColor
+        property string widestValue: ""
+        property string widestDetail: ""
+        spacing: 4
+        Kirigami.Icon {
+            source: icon
+            isMask: true
+            color: Kirigami.Theme.textColor
+            opacity: 0.7
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+        }
+        PlasmaComponents3.Label {
+            text: value
+            color: valueColor
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestValue ? valueMetrics.width : 0
+            TextMetrics { id: valueMetrics; text: widestValue; font.features: { "tnum": 1 } }
+        }
+        PlasmaComponents3.Label {
+            visible: detail !== "" || widestDetail !== ""
+            text: detail
+            color: detailColor
+            opacity: detailColor === Kirigami.Theme.textColor ? 0.5 : 1
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestDetail ? detailMetrics.width : 0
+            TextMetrics { id: detailMetrics; text: widestDetail; font.features: { "tnum": 1 } }
         }
     }
 }

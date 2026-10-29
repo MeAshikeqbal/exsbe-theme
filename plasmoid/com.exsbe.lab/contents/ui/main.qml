@@ -76,7 +76,7 @@ PlasmoidItem {
         onNewData: (source) => disconnectSource(source)
     }
     function refresh() { poller.connectSource(env + "exsbe-pve status") }
-    function run(cmd) { runner.connectSource(env + "setsid -f " + cmd + " >/dev/null 2>&1") }
+    function run(cmd) { runner.connectSource(env + "systemd-run --user --scope --quiet --collect setsid -f " + cmd + " >/dev/null 2>&1") }
 
     Timer {
         interval: 15000

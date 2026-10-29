@@ -105,7 +105,7 @@ PlasmoidItem {
         connectedSources: []
         onNewData: (source) => disconnectSource(source)
     }
-    function run(cmd) { runner.connectSource("PATH=\"$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH\" setsid -f " + cmd + " >/dev/null 2>&1") }
+    function run(cmd) { runner.connectSource("PATH=\"$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH\" systemd-run --user --scope --quiet --collect setsid -f " + cmd + " >/dev/null 2>&1") }
 
     preferredRepresentation: compactRepresentation
     toolTipMainText: "System"
@@ -114,48 +114,33 @@ PlasmoidItem {
 
     // --- top bar ---------------------------------------------------------------------------
     compactRepresentation: MouseArea {
-        Layout.minimumWidth: bar.implicitWidth + Kirigami.Units.smallSpacing * 2
+        Layout.minimumWidth: chips.implicitWidth + Kirigami.Units.smallSpacing * 2
         Layout.preferredWidth: Layout.minimumWidth
         hoverEnabled: true
         onClicked: root.expanded = !root.expanded
 
         RowLayout {
-            id: bar
+            id: chips
             anchors.centerIn: parent
             spacing: Kirigami.Units.largeSpacing
-            Readout { label: "cpu"; value: root.cpuPct; extra: root.deg(root.n(cpuTemp)); lvl: root.cpuLevel }
-            Readout { label: "ram"; value: root.memPct; lvl: root.memLevel }
-            Readout { visible: root.gpuActive; label: "gpu"; value: root.gpuPct; extra: root.deg(root.n(gpuTemp)); lvl: root.gpuLevel }
-        }
-    }
-
-    // "cpu 12% · 54°" over a thin usage bar
-    component Readout: ColumnLayout {
-        property string label
-        property real value
-        property string extra: ""
-        property int lvl: 0
-        spacing: 1
-        RowLayout {
-            spacing: 3
-            PlasmaComponents3.Label { text: label; opacity: 0.55; font.pointSize: Kirigami.Theme.smallFont.pointSize }
-            PlasmaComponents3.Label {
-                text: Math.round(value) + "%" + (extra ? " · " + extra : "")
-                color: root.tint(lvl)
-                font.features: { "tnum": 1 }   // tabular digits, so the width doesn't jump
+            Chip {
+                icon: "exsbe-cpu-symbolic"
+                value: Math.round(root.cpuPct) + "%"; widestValue: "88%"
+                detail: root.deg(root.n(cpuTemp)); widestDetail: "88°"
+                valueColor: root.tint(root.cpuLevel); detailColor: root.tint(root.level(root.n(cpuTemp), 85, 95))
             }
-        }
-        Rectangle {
-            Layout.fillWidth: true
-            height: 2
-            radius: 1
-            color: Qt.alpha(Kirigami.Theme.textColor, 0.15)
-            Rectangle {
-                width: parent.width * Math.min(1, value / 100)
-                height: parent.height
-                radius: 1
-                color: lvl ? root.tint(lvl) : Kirigami.Theme.highlightColor
-                Behavior on width { NumberAnimation { duration: 400 } }
+            Chip {
+                icon: "exsbe-memory-symbolic"
+                value: Math.round(root.memPct) + "%"; widestValue: "88%"
+                valueColor: root.tint(root.memLevel)
+            }
+            // always present so the bar never jumps; dimmed while the dGPU sleeps
+            Chip {
+                icon: "gpu-symbolic"
+                opacity: root.gpuActive ? 1 : 0.45
+                value: root.gpuActive ? Math.round(root.gpuPct) + "%" : "–"; widestValue: "88%"
+                detail: root.gpuActive ? root.deg(root.n(gpuTemp)) : ""; widestDetail: "88°"
+                valueColor: root.tint(root.gpuLevel); detailColor: root.tint(root.level(root.n(gpuTemp), 80, 87))
             }
         }
     }
@@ -386,6 +371,43 @@ PlasmoidItem {
             ctx.strokeStyle = line
             ctx.lineWidth = 1.5
             ctx.stroke()
+        }
+    }
+
+    // top-bar chip, shared look across the Exsbe widgets: icon · value · dim detail.
+    // widest* reserve room so the bar never shifts as numbers change.
+    component Chip: RowLayout {
+        property string icon
+        property string value
+        property string detail: ""
+        property color valueColor: Kirigami.Theme.textColor
+        property color detailColor: Kirigami.Theme.textColor
+        property string widestValue: ""
+        property string widestDetail: ""
+        spacing: 4
+        Kirigami.Icon {
+            source: icon
+            isMask: true
+            color: Kirigami.Theme.textColor
+            opacity: 0.7
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+        }
+        PlasmaComponents3.Label {
+            text: value
+            color: valueColor
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestValue ? valueMetrics.width : 0
+            TextMetrics { id: valueMetrics; text: widestValue; font.features: { "tnum": 1 } }
+        }
+        PlasmaComponents3.Label {
+            visible: detail !== "" || widestDetail !== ""
+            text: detail
+            color: detailColor
+            opacity: detailColor === Kirigami.Theme.textColor ? 0.5 : 1
+            font.features: { "tnum": 1 }
+            Layout.minimumWidth: widestDetail ? detailMetrics.width : 0
+            TextMetrics { id: detailMetrics; text: widestDetail; font.features: { "tnum": 1 } }
         }
     }
 }

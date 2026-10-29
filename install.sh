@@ -32,8 +32,12 @@ desktop() {
   plasma-apply-desktoptheme exsbe
   # icons: WhiteSur-dark with graphite folders
   if [ -d ~/.local/share/icons/WhiteSur-dark ]; then
-    "$HERE/icons/gen-folders.sh"
+    "$HERE/icons/gen-folders.sh"   # graphite folders, dock tiles, symbolic glyphs
     kw --file kdeglobals --group Icons --key Theme Exsbe
+    # VS Code's Homebrew launcher points at a PNG, which skips the icon theme (and the Exsbe tile)
+    [ -f ~/.local/share/applications/code.desktop ] &&
+      sed -i 's|^Icon=/.*code\.png$|Icon=code|' ~/.local/share/applications/code.desktop
+    rm -f ~/.cache/icon-cache.kcache
   else
     kw --file kdeglobals --group Icons --key Theme WhiteSur-dark
   fi

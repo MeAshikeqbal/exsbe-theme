@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KRunner plugin (D-Bus runner org.exsbe.krunner): Lab from Alt+Space.
+"""KRunner plugin (D-Bus runner org.exsbe.krunner): your Proxmox lab from Alt+Space.
 
   <name> / pve <name>    Proxmox guests: Enter opens a shell; actions: console, Proxmox page
   ssh <host>             SSH hosts from ~/.ssh/config and config.d: Enter opens ssh in kitty
@@ -78,8 +78,8 @@ class Runner:
         c = conf()
         key = subprocess.run(["secret-tool", "lookup", "service", "exsbe-pve", "account", "jellyfin"],
                              capture_output=True, text=True).stdout.strip()
-        server = c.get("jellyfin", "http://192.0.2.104:8096").rstrip("/")
-        if not key:
+        server = c.get("jellyfin", "").rstrip("/")
+        if not key or not server:
             return []
         q = urllib.parse.urlencode({"searchTerm": term, "Recursive": "true", "Limit": "8",
                                     "IncludeItemTypes": "Movie,Series,Episode,MusicAlbum,Audio"})

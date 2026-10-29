@@ -1,5 +1,5 @@
 [Unit]
-Description=Lab Proxmox alerts and SSH config
+Description=Proxmox alerts and SSH config
 After=network-online.target
 
 [Service]

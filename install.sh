@@ -220,7 +220,11 @@ workflow() {
   }
   rule code "VS Code on Code" '(?i)^code$' Code
   rule web "Brave on Web" '(?i)^(brave-browser|com\.brave\.browser)$' Web
-  rule lab "Proxmox, Termius, Moonlight on Lab" '(?i)^(brave-pve\.local\.lab\.site__-default|com\.termius\.termius|termius.*|com\.moonlight_stream\.moonlight|moonlight)$' Lab
+  # the Proxmox app window's class comes from the web UI host in ~/.config/exsbe/pve.conf
+  local pvehost pveapp
+  pvehost=$(awk -F' *= *' '$1 == "web" { print $2 }' ~/.config/exsbe/pve.conf 2>/dev/null | sed -E 's#^https?://##; s#[:/].*##')
+  pveapp=${pvehost:+brave-${pvehost//./\\.}__-default|}
+  rule lab "Proxmox, Termius, Moonlight on Lab" "(?i)^(${pveapp}com\\.termius\\.termius|termius.*|com\\.moonlight_stream\\.moonlight|moonlight)\$" Lab
   rule play "Games on Play" '(?i)^(steam|steam_app_.*|steamwebhelper|lutris|net\.lutris\.lutris|heroic|com\.heroicgameslauncher\.hgl|gamescope)$' Play
   local existing; existing="$(kreadconfig6 --file kwinrulesrc --group General --key rules | tr ',' '\n' | grep -v '^exsbe-' | grep -v '^$' || true)"
   local all; all="$(printf '%s\n' $existing "${rules[@]}" | paste -sd,)"
@@ -333,8 +337,9 @@ panel_widget() {
 }
 
 lab() {
-  # Lab Proxmox: CLI, guest picker (Meta+Shift+P), panel widget, alerts + SSH config timer.
-  # One-time token setup (root SSH): bin/exsbe-pve-setup root@192.0.2.10 --pbs root@203.0.113.10
+  # Proxmox lab: CLI, guest picker (Meta+Shift+P), panel widget, alerts + SSH config timer.
+  # Site values live in ~/.config/exsbe/pve.conf (from lab/pve.conf.example; never committed).
+  # One-time token setup (root SSH): bin/exsbe-pve-setup root@<node> [--pbs root@<pbs>]
   install -Dm755 "$HERE/bin/exsbe-pve" ~/.local/bin/exsbe-pve
   install -Dm755 "$HERE/bin/exsbe-pve-setup" ~/.local/bin/exsbe-pve-setup
   install -Dm755 "$HERE/bin/pvepick" ~/.local/bin/pvepick
@@ -347,10 +352,14 @@ lab() {
   install -Dm644 "$HERE/krunner/exsbe.desktop" ~/.local/share/krunner/dbusplugins/exsbe.desktop
   mkdir -p ~/.local/share/dbus-1/services
   sed "s|@HOME@|$HOME|" "$HERE/krunner/org.exsbe.krunner.service" > ~/.local/share/dbus-1/services/org.exsbe.krunner.service
-  [ -f ~/.config/exsbe/pve.conf ] || install -Dm644 "$HERE/lab/pve.conf" ~/.config/exsbe/pve.conf
+  if [ ! -f ~/.config/exsbe/pve.conf ]; then
+    install -Dm644 "$HERE/lab/pve.conf.example" ~/.config/exsbe/pve.conf
+    echo "!! edit ~/.config/exsbe/pve.conf with your cluster's addresses, then run: ./install.sh lab"
+  fi
   local kitty d; kitty="$(command -v kitty || echo /home/linuxbrew/.linuxbrew/bin/kitty)"
+  local pvehost; pvehost=$(awk -F' *= *' '$1 == "web" { print $2 }' ~/.config/exsbe/pve.conf | sed -E 's#^https?://##; s#[:/].*##')
   for d in pvepick proxmox; do
-    sed -e "s|@KITTY@|$kitty|" -e "s|@HOME@|$HOME|" "$HERE/bin/$d.desktop" > ~/.local/share/applications/$d.desktop
+    sed -e "s|@KITTY@|$kitty|" -e "s|@HOME@|$HOME|" -e "s|@PVEHOST@|$pvehost|" "$HERE/bin/$d.desktop" > ~/.local/share/applications/$d.desktop
   done
   kw --file kglobalshortcutsrc --group services --group pvepick.desktop --key _launch "Meta+Shift+P"
   update-desktop-database ~/.local/share/applications 2>/dev/null || true
@@ -365,7 +374,7 @@ lab() {
   systemctl --user daemon-reload
   systemctl --user enable --now exsbe-pve.timer
 
-  # Tailscale: accept the tailscale-router subnet route only when away from home
+  # Tailscale: accept the lab's subnet route only when away from home
   install -Dm644 "$HERE/systemd/exsbe-tailnet-routes.service" ~/.config/systemd/user/exsbe-tailnet-routes.service
   systemctl --user daemon-reload
   systemctl --user enable --now exsbe-tailnet-routes.service

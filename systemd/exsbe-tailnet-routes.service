@@ -1,5 +1,5 @@
 [Unit]
-Description=Accept the Lab Tailscale route only when away from home
+Description=Accept the lab's Tailscale route only when away from home
 After=network-online.target
 
 [Service]

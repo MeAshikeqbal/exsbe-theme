@@ -1,4 +1,4 @@
-// Exsbe Lab dashboard: a desktop card with the Lab cluster at a glance, through
+// Exsbe Lab dashboard: a desktop card with the Proxmox cluster at a glance, through
 // `exsbe-pve status`. Only shown (and only polling) while the Lab workspace is current.
 import QtQuick
 import QtQuick.Layouts
@@ -124,7 +124,7 @@ PlasmoidItem {
                     Layout.fillWidth: true
                     Kirigami.Heading {
                         level: 1
-                        text: root.snap ? root.snap.cluster : "Lab"
+                        text: root.snap ? root.snap.cluster : "Proxmox"
                     }
                     PlasmaComponents3.Label {
                         opacity: 0.65

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lab guest picker (Meta+Shift+P): fzf over every Proxmox VM and container, with a live
+# Proxmox guest picker (Meta+Shift+P): fzf over every Proxmox VM and container, with a live
 # details pane. Enter opens a shell: containers via pct enter, VMs via ssh (else the noVNC
 # console); a stopped guest is offered a start. Exit the shell to come back to the list.
 # Ctrl+O console · Ctrl+W web UI · Ctrl+S start · Ctrl+X shut down · Ctrl+R reboot

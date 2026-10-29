@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Lab guests
+Name=Proxmox guests
 Comment=Pick a Proxmox VM or container: ssh, console, start, stop
 Icon=network-server
 Exec=@KITTY@ --title lab -o initial_window_width=170c -o initial_window_height=42c -o remember_window_size=no @HOME@/.local/bin/pvepick

@@ -1,5 +1,5 @@
 [Unit]
-Description=Check the Lab Proxmox cluster every 5 minutes
+Description=Check the Proxmox cluster every 5 minutes
 
 [Timer]
 OnStartupSec=1min

@@ -9,10 +9,13 @@ import org.kde.kirigami as Kirigami
 PlasmoidItem {
     id: root
 
-    // Example City (the place the stock weather widget used)
-    readonly property string place: "Example City"
-    readonly property real latitude: 0.0
-    readonly property real longitude: 0.0
+    // set in the widget's settings (right-click > Configure)
+    readonly property string place: Plasmoid.configuration.place || "Set a location"
+    readonly property real latitude: Plasmoid.configuration.latitude
+    readonly property real longitude: Plasmoid.configuration.longitude
+    readonly property bool located: Plasmoid.configuration.latitude !== 0 || Plasmoid.configuration.longitude !== 0
+    onLatitudeChanged: refresh()
+    onLongitudeChanged: refresh()
 
     property var now: null
     property var days: []
@@ -41,6 +44,7 @@ PlasmoidItem {
     function describe(code) { return info(code, 1)[0] }
 
     function refresh() {
+        if (!located) { error = "right-click > Configure to set a location"; return }
         const url = "https://api.open-meteo.com/v1/forecast?latitude=" + latitude + "&longitude=" + longitude
             + "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day"
             + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"

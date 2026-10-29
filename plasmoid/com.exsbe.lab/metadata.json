@@ -3,7 +3,7 @@
     "KPlugin": {
         "Authors": [{ "Name": "Exsbe" }],
         "Category": "System Information",
-        "Description": "Lab cluster dashboard for the desktop, shown on the Lab workspace",
+        "Description": "Proxmox cluster dashboard for the desktop, shown on the Lab workspace",
         "Icon": "network-server",
         "Id": "com.exsbe.lab",
         "License": "MIT",

@@ -17,7 +17,7 @@ remembered. IP endpoints are verified against the cluster CA (exsbe-pve-setup sa
 With `pbs = URL` in pve.conf and a PBS token (exsbe-pve-setup --pbs), status also covers
 Proxmox Backup Server: datastores, garbage collection, verify/prune/sync jobs, failed tasks.
 """
-import json, os, re, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+import ipaddress, json, os, re, ssl, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -31,7 +31,7 @@ STORAGE_WARN = 0.85
 
 
 def conf():
-    c = {"endpoints": ["https://pve.example.lan"], "web": "https://pve.example.lan"}
+    c = {"endpoints": [], "web": ""}
     if CONF.exists():
         for line in CONF.read_text().splitlines():
             k, _, v = line.partition("=")
@@ -44,6 +44,11 @@ def secret(account):
     r = subprocess.run(["secret-tool", "lookup", "service", "exsbe-pve", "account", account],
                        capture_output=True, text=True)
     return r.stdout.strip()
+
+
+def web_url():
+    c = conf()
+    return (c.get("web") or (c["endpoints"] or [""])[0]).rstrip("/")
 
 
 def token():
@@ -90,6 +95,8 @@ class Api:
         self.ctx_cluster = ssl.create_default_context(cafile=str(CA)) if CA.exists() else None
         last = CACHE / "pve-endpoint"
         eps = conf()["endpoints"]
+        if not eps:
+            sys.exit(f"no endpoints in {CONF}; copy lab/pve.conf.example there and fill it in")
         if last.exists() and last.read_text().strip() in eps:  # remembered one first
             eps = [last.read_text().strip()] + [e for e in eps if e != last.read_text().strip()]
         self.endpoints, self.base = eps, None
@@ -176,7 +183,8 @@ def guest_ip(api, g):
     except Exception:
         return ""
     addrs = [a for a in addrs if a and not a.startswith(("127.", "172.17.", "169.254."))]
-    return next((a for a in addrs if a.startswith("192.168.")), addrs[0] if addrs else "")
+    lan = ipaddress.ip_network(conf().get("lan", "192.168.0.0/16"), strict=False)
+    return next((a for a in addrs if ipaddress.ip_address(a) in lan), addrs[0] if addrs else "")
 
 
 def with_ips(api, guests):
@@ -208,7 +216,7 @@ def app_window(url):
 
 
 def notify(title, body, urgency="normal", icon="network-server"):
-    subprocess.run(["notify-send", "-a", "Lab", "-i", icon, "-u", urgency, title, body])
+    subprocess.run(["notify-send", "-a", "Proxmox", "-i", icon, "-u", urgency, title, body])
 
 
 def cmd_alerts(api):
@@ -239,18 +247,18 @@ def cmd_alerts(api):
             now[f'pbsjob:{j["kind"]}:{j["id"]}'] = (f'PBS {j["kind"]} job {j["id"]} failed: {j["state"]}', "critical")
     for key, (msg, urg) in now.items():
         if key not in state["active"]:
-            notify("Lab", msg, urg, "dialog-warning")
+            notify(s["cluster"] or "Proxmox", msg, urg, "dialog-warning")
     for key, msg in state["active"].items():
         if key not in now:
-            notify("Lab", f"Resolved: {msg}", "low", "dialog-ok")
+            notify(s["cluster"] or "Proxmox", f"Resolved: {msg}", "low", "dialog-ok")
     seen = set(state["seenBackups"])
     for t in pbs.get("failed", []):
         if t["upid"] not in seen and state.get("initialized"):
-            notify("Lab PBS task failed", f'{t["type"]} {t["id"]}: {t["status"]}', "critical", "dialog-error")
+            notify("PBS task failed", f'{t["type"]} {t["id"]}: {t["status"]}', "critical", "dialog-error")
         seen.add(t["upid"])
     for b in s["backup"]["failed"]:
         if b["upid"] not in seen and state.get("initialized"):
-            notify("Lab backup failed", f'{b["id"] or "job"} on {b["node"]}: {b["status"]}', "critical", "dialog-error")
+            notify("Backup failed", f'{b["id"] or "job"} on {b["node"]}: {b["status"]}', "critical", "dialog-error")
         seen.add(b["upid"])
     state = {"initialized": True, "active": {k: m for k, (m, _) in now.items()}, "seenBackups": sorted(seen)[-200:]}
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -267,7 +275,7 @@ def cmd_ssh_config(api):
     for g in guests:
         ip = g["ip"] or cached_ips().get(str(g["vmid"]))
         if ip:
-            # Terraform VMs (lab-infra) log in as your own user; everything else as root
+            # Terraform VMs (tagged "terraform") log in as your own user; everything else as root
             user = [] if "terraform" in g["tags"].split(";") else ["  User root"]
             out += [f'Host {g["name"]}', f"  HostName {ip}", *user, ""]
     d = Path.home() / ".ssh/config.d"
@@ -403,7 +411,7 @@ def connect(api, vmid):
     elif g["name"] in ssh_hosts():
         how, cmd = "ssh", ["ssh", g["name"]]
     else:
-        app_window(f'{conf()["web"]}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
+        app_window(f'{web_url()}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
         input(f"\n  {g['name']} has no IP for ssh; opened its console in a window. Enter to go back ")
         return
     print(f"\n  {ACCENT}→ {g['name']}{RST} {DIM}({how}) · exit to return to the list{RST}\n", flush=True)
@@ -451,13 +459,13 @@ def main():
             if g["type"] == "lxc":
                 node_ip = next(n["ip"] for n in snapshot(api)["nodes"] if n["name"] == g["node"])
                 os.execvp(KITTY, [KITTY, "--title", g["name"], "ssh", "-t", f"root@{node_ip}", "pct", "enter", str(g["vmid"])])
-            app_window(f'{conf()["web"]}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
+            app_window(f'{web_url()}/?console=kvm&novnc=1&vmid={g["vmid"]}&vmname={g["name"]}&node={g["node"]}&resize=scale')
         elif a[0] == "web":
             if len(a) > 1 and a[1].isdigit():  # a guest's page
                 g = find(api, a[1])
-                app_window(f'{conf()["web"]}/#v1:0:={g["type"]}%2F{g["vmid"]}')
+                app_window(f'{web_url()}/#v1:0:={g["type"]}%2F{g["vmid"]}')
             else:
-                app_window(conf()["web"] + (a[1] if len(a) > 1 else ""))
+                app_window(web_url() + (a[1] if len(a) > 1 else ""))
         elif a[0] == "ssh-config":
             cmd_ssh_config(api)
         elif a[0] == "alerts":

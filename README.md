@@ -7,7 +7,8 @@ Graphite KDE Plasma 6 setup for Bazzite built around the Exsbe wallpapers and lo
 ```sh
 ./install.sh                 # everything (user level, no sudo)
 ./install.sh desktop layout  # or single sections
-bin/exsbe-pve-setup root@192.0.2.10 --pbs root@203.0.113.10   # once, before the lab section
+cp lab/pve.conf.example ~/.config/exsbe/pve.conf   # once: your cluster's addresses (stays local)
+bin/exsbe-pve-setup root@<node> --pbs root@<pbs>   # once, before the lab section
 bin/exsbe-secret jellyfin    # once: Jellyfin API key (Dashboard → API Keys)
 sudo ./install-boot.sh       # boot splash + login screen (build first: rpm/build.sh), then reboot
 ./restore.sh                 # undo, from the backup taken before the first install
@@ -35,9 +36,9 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `plasmoid/com.exsbe.proxmox` | Proxmox panel widget: nodes, storage, backups, guests (start / shut down / console / ssh) |
 | `bin/exsbe-pve`, `bin/pvepick` | Proxmox CLI (status, actions, consoles, ssh-config, alerts) and the fzf guest picker |
 | `bin/exsbe-pve-setup` | one-time: least-privilege Proxmox users + API tokens, secrets straight into KWallet |
-| `lab/pve.conf` | cluster endpoints (LAN name, then node IPs), PBS URL, home router MAC |
+| `lab/pve.conf.example` | template for `~/.config/exsbe/pve.conf` (local, never committed): endpoints, PBS, LAN, home router MAC, Jellyfin, proxies |
 | `plasmoid/com.exsbe.jellyfin`, `bin/exsbe-jellyfin` | Jellyfin widget: every user's streams, direct play vs transcode (codecs, reasons, GPU), and where they play from (LAN device, Tailscale, city/ISP) |
-| `bin/exsbe-tailnet-routes` | uses the `tailscale-router` Tailscale route (CT 112, proxy `192.0.2.101/32` only) only when away from home |
+| `bin/exsbe-tailnet-routes` | accepts the lab's Tailscale route (advertise only the reverse proxy, a /32) only when away from home |
 | `bin/exsbe-secret` | store an API key in KWallet without echo (`exsbe-secret jellyfin`) |
 | `bin/exsbe-krunner`, `krunner/` | KRunner plugin: Proxmox guests (`jelly`, `pve …`), `ssh …` hosts, `jf …` Jellyfin library |
 | `bin/exsbe-pve-keys` | put this PC's SSH key into every container with sshd; host keys read through Proxmox |

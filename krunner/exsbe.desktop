@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=Lab
+Name=Proxmox lab
 Comment=Proxmox guests, SSH hosts and the Jellyfin library (Exsbe)
 Icon=network-server
 Type=Service

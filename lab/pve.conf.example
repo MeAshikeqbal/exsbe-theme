@@ -1,0 +1,22 @@
+# Exsbe Lab: your Proxmox cluster and services. Copy to ~/.config/exsbe/pve.conf and fill in;
+# that file stays on this machine (install.sh copies this example only when it is missing).
+
+# Proxmox API endpoints, tried in order: a reverse-proxy name first, then node addresses.
+# Node IPs are verified against the cluster CA that exsbe-pve-setup saves.
+endpoints = https://pve.example.lan https://192.0.2.10:8006 https://192.0.2.20:8006
+# web UI for app windows and VM consoles (defaults to the first endpoint)
+web = https://pve.example.lan
+# Proxmox Backup Server (read-only token from exsbe-pve-setup --pbs)
+pbs = https://pbs.example.lan:8007
+
+# your LAN (guest IPs are picked from it; Jellyfin viewers in it count as "Home")
+lan = 192.0.2.0/24
+# home router MAC: exsbe-tailnet-routes only accepts the Tailscale route when the gateway is not this
+home_gateway = 00:00:5e:00:53:01
+
+# Jellyfin: API (direct) and web UI
+jellyfin = http://192.0.2.40:8096
+jellyfin_web = https://jellyfin.example.lan
+# LAN addresses that are not viewers themselves: reverse proxies and the Tailscale subnet router
+proxies = 192.0.2.50=reverse-proxy
+tailnet_router = 192.0.2.60=tailscale-router

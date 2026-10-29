@@ -7,7 +7,7 @@
 API key from KWallet (service=exsbe-pve, account=jellyfin; store it with `exsbe-secret jellyfin`).
 Server URLs from ~/.config/exsbe/pve.conf (jellyfin = ..., jellyfin_web = ...).
 Where a session plays from comes from its IP: home LAN (named where possible), Tailscale
-(via the tailscale-router subnet router), the reverse proxy (real IP hidden until it is in
+(via the Tailscale subnet router), the reverse proxy (real IP hidden until it is in
 Jellyfin's Known proxies), or the internet - public IPs are looked up on ipinfo.io and
 cached for a week in ~/.cache/exsbe/geoip.json.
 """
@@ -19,20 +19,28 @@ CONF = Path.home() / ".config/exsbe/pve.conf"
 CACHE = Path.home() / ".cache/exsbe"
 BROWSER = ["flatpak", "run", "com.brave.Browser"]
 TICKS = 10_000_000  # Jellyfin ticks per second
-# addresses on the home LAN that are not viewers themselves
-PROXIES = {"192.0.2.101": "npmplus", "192.0.2.150": "edge-proxy"}
-TAILNET_ROUTER = {"192.0.2.112": "tailscale-router"}
-HOME = ipaddress.ip_network("192.0.2.0/24")
 
 
 def conf():
-    c = {"jellyfin": "http://192.0.2.104:8096", "jellyfin_web": "https://jellyfin.example.lan"}
+    c = {"jellyfin": "", "jellyfin_web": ""}
     if CONF.exists():
         for line in CONF.read_text().splitlines():
             k, _, v = line.partition("=")
             if v and not line.lstrip().startswith("#"):
                 c[k.strip()] = v.strip()
     return c
+
+
+def site():
+    """From pve.conf: reverse proxies and the Tailscale router on the LAN (ip=name ...), and the LAN."""
+    c = conf()
+    pairs = lambda v: dict(p.split("=", 1) for p in v.split() if "=" in p)
+    return (pairs(c.get("proxies", "")), pairs(c.get("tailnet_router", "")),
+            ipaddress.ip_network(c.get("lan", "192.168.0.0/16"), strict=False))
+
+
+# addresses on the LAN that are not viewers themselves
+PROXIES, TAILNET_ROUTER, HOME = site()
 
 
 def api_key():
@@ -190,6 +198,8 @@ def what(item, server):
 
 def status():
     c = conf()
+    if not c["jellyfin"]:
+        raise ValueError(f"no jellyfin = ... in {CONF}")
     server, key = c["jellyfin"].rstrip("/"), api_key()
     sessions = get(server, key, "/Sessions?activeWithinSeconds=900")
     info = get(server, key, "/System/Info")
@@ -223,7 +233,7 @@ def main():
         except (OSError, ValueError) as e:
             json.dump({"error": f"Jellyfin unreachable ({e})"}, sys.stdout)
     elif a[0] == "web":
-        subprocess.Popen(BROWSER + [f'--app={conf()["jellyfin_web"]}'], stdout=subprocess.DEVNULL,
+        subprocess.Popen(BROWSER + [f'--app={conf()["jellyfin_web"] or conf()["jellyfin"]}'], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
     else:
         sys.exit(__doc__)

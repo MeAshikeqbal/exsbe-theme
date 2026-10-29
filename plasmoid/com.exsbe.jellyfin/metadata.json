@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Exsbe" }],
+        "Category": "Multimedia",
+        "Description": "Who is watching what on Jellyfin, how it plays and from where",
+        "Icon": "video-television",
+        "Id": "com.exsbe.jellyfin",
+        "License": "MIT",
+        "Name": "Jellyfin",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

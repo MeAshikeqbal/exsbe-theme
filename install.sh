@@ -291,6 +291,26 @@ polish() {
   qdbus_reconfigure
 }
 
+# panel_widget PLUGIN AFTER: install PLUGIN from plasmoid/ and add it to the top bar right after
+# AFTER (Plasma rewrites the order when a widget is added, so it is placed in a second pass).
+# Returns 0 when it was added (the shell then needs a restart to show the order).
+panel_widget() {
+  local shell=(org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell evaluateScript s)
+  kpackagetool6 -t Plasma/Applet -u "$HERE/plasmoid/$1" >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i "$HERE/plasmoid/$1"
+  busctl --user call "${shell[@]}" "
+    panels().filter(p => p.location === 'top' && !p.widgets().some(w => w.type === '$1'))
+      .forEach(p => { p.addWidget('$1'); print('added') });" | grep -q added || return 1
+  busctl --user call "${shell[@]}" "
+    panels().filter(p => p.location === 'top').forEach(p => {
+      const ws = p.widgets(), me = ws.find(w => w.type === '$1').id, after = ws.find(w => w.type === '$2');
+      p.currentConfigGroup = ['General'];
+      let ids = String(p.readConfig('AppletOrder') || '').split(';').map(Number).filter(i => ws.some(w => w.id === i));
+      ids = ids.concat(ws.map(w => w.id).filter(i => !ids.includes(i))).filter(i => i !== me);
+      ids.splice(after ? ids.indexOf(after.id) + 1 : ids.length, 0, me);
+      p.writeConfig('AppletOrder', ids.join(';'));
+    });" >/dev/null
+}
+
 lab() {
   # Lab Proxmox: CLI, guest picker (Meta+Shift+P), panel widget, alerts + SSH config timer.
   # One-time token setup (root SSH): bin/exsbe-pve-setup root@192.0.2.10 --pbs root@203.0.113.10
@@ -298,7 +318,7 @@ lab() {
   install -Dm755 "$HERE/bin/exsbe-pve-setup" ~/.local/bin/exsbe-pve-setup
   install -Dm755 "$HERE/bin/pvepick" ~/.local/bin/pvepick
   install -Dm755 "$HERE/bin/exsbe-secret" ~/.local/bin/exsbe-secret
-  install -Dm755 "$HERE/bin/exsbe-jellyfin-mpris" ~/.local/bin/exsbe-jellyfin-mpris
+  install -Dm755 "$HERE/bin/exsbe-jellyfin" ~/.local/bin/exsbe-jellyfin
   install -Dm755 "$HERE/bin/exsbe-tailnet-routes" ~/.local/bin/exsbe-tailnet-routes
   [ -f ~/.config/exsbe/pve.conf ] || install -Dm644 "$HERE/lab/pve.conf" ~/.config/exsbe/pve.conf
   local kitty d; kitty="$(command -v kitty || echo /home/linuxbrew/.linuxbrew/bin/kitty)"
@@ -320,31 +340,15 @@ lab() {
 
   # Tailscale: accept the tailscale-router subnet route only when away from home
   install -Dm644 "$HERE/systemd/exsbe-tailnet-routes.service" ~/.config/systemd/user/exsbe-tailnet-routes.service
-  # Jellyfin now playing in the media controls (API key: exsbe-secret jellyfin)
-  install -Dm644 "$HERE/systemd/exsbe-jellyfin-mpris.service" ~/.config/systemd/user/exsbe-jellyfin-mpris.service
   systemctl --user daemon-reload
   systemctl --user enable --now exsbe-tailnet-routes.service
-  if [ -n "$(secret-tool lookup service exsbe-pve account jellyfin 2>/dev/null)" ]; then
-    systemctl --user enable --now exsbe-jellyfin-mpris.service
-  fi
 
-  # panel widget, right after the containers widget on the top bar
-  # (Plasma rewrites the order when a widget is added, so place it in a second pass)
-  local pkg="$HERE/plasmoid/com.exsbe.proxmox" shell=(org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell evaluateScript s)
-  kpackagetool6 -t Plasma/Applet -u "$pkg" >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i "$pkg"
-  if busctl --user call "${shell[@]}" '
-    panels().filter(p => p.location === "top" && !p.widgets().some(w => w.type === "com.exsbe.proxmox"))
-      .forEach(p => { p.addWidget("com.exsbe.proxmox"); print("added") });' | grep -q added; then
-    busctl --user call "${shell[@]}" '
-      panels().filter(p => p.location === "top").forEach(p => {
-        const ws = p.widgets(), ids = ws.filter(w => w.type !== "com.exsbe.proxmox").map(w => w.id);
-        const c = ws.find(w => w.type === "com.exsbe.containers");
-        ids.splice(c ? ids.indexOf(c.id) + 1 : ids.length, 0, ws.find(w => w.type === "com.exsbe.proxmox").id);
-        p.currentConfigGroup = ["General"];
-        p.writeConfig("AppletOrder", ids.join(";"));
-      });' >/dev/null
-    systemctl --user restart plasma-plasmashell.service
-  fi
+  # top bar: Proxmox after the containers widget, Jellyfin (API key: exsbe-secret jellyfin) after it
+  local shell=(org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell evaluateScript s) added=0 pkg
+  for pkg in com.exsbe.proxmox:com.exsbe.containers com.exsbe.jellyfin:com.exsbe.proxmox; do
+    panel_widget "${pkg%%:*}" "${pkg#*:}" && added=1
+  done
+  [ $added = 1 ] && systemctl --user restart plasma-plasmashell.service
 
   # Lab dashboard on the main screen's desktop (shown only on the Lab workspace).
   # New desktop widgets get a default size, so set position/size in the config with the shell stopped.

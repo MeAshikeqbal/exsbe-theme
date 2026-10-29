@@ -34,7 +34,7 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `bin/exsbe-pve`, `bin/pvepick` | Proxmox CLI (status, actions, consoles, ssh-config, alerts) and the fzf guest picker |
 | `bin/exsbe-pve-setup` | one-time: least-privilege Proxmox users + API tokens, secrets straight into KWallet |
 | `lab/pve.conf` | cluster endpoints (LAN name, then node IPs), PBS URL, home router MAC |
-| `bin/exsbe-jellyfin-mpris` | Jellyfin "now playing" (any device) in Plasma's media controls and lock screen |
+| `plasmoid/com.exsbe.jellyfin`, `bin/exsbe-jellyfin` | Jellyfin widget: every user's streams, direct play vs transcode (codecs, reasons, GPU), and where they play from (LAN device, Tailscale, city/ISP) |
 | `bin/exsbe-tailnet-routes` | uses the `tailscale-router` Tailscale subnet route (CT 112) only when away from home |
 | `bin/exsbe-secret` | store an API key in KWallet without echo (`exsbe-secret jellyfin`) |
 | `kwin/exsbe-gamemode` | Play workspace: blur off, dock hidden, Do Not Disturb |

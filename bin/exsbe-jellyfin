@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Exsbe Lab: who is watching what on Jellyfin, how it plays, and from where.
+
+  exsbe-jellyfin status     active sessions as JSON (panel widget)
+  exsbe-jellyfin web        Jellyfin web UI as an app window
+
+API key from KWallet (service=exsbe-pve, account=jellyfin; store it with `exsbe-secret jellyfin`).
+Server URLs from ~/.config/exsbe/pve.conf (jellyfin = ..., jellyfin_web = ...).
+Where a session plays from comes from its IP: home LAN (named where possible), Tailscale
+(via the tailscale-router subnet router), the reverse proxy (real IP hidden until it is in
+Jellyfin's Known proxies), or the internet - public IPs are looked up on ipinfo.io and
+cached for a week in ~/.cache/exsbe/geoip.json.
+"""
+import ipaddress, json, socket, subprocess, sys, time, urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+CONF = Path.home() / ".config/exsbe/pve.conf"
+CACHE = Path.home() / ".cache/exsbe"
+BROWSER = ["flatpak", "run", "com.brave.Browser"]
+TICKS = 10_000_000  # Jellyfin ticks per second
+# addresses on the home LAN that are not viewers themselves
+PROXIES = {"192.0.2.101": "npmplus", "192.0.2.150": "edge-proxy"}
+TAILNET_ROUTER = {"192.0.2.112": "tailscale-router"}
+HOME = ipaddress.ip_network("192.0.2.0/24")
+
+
+def conf():
+    c = {"jellyfin": "http://192.0.2.104:8096", "jellyfin_web": "https://jellyfin.example.lan"}
+    if CONF.exists():
+        for line in CONF.read_text().splitlines():
+            k, _, v = line.partition("=")
+            if v and not line.lstrip().startswith("#"):
+                c[k.strip()] = v.strip()
+    return c
+
+
+def api_key():
+    r = subprocess.run(["secret-tool", "lookup", "service", "exsbe-pve", "account", "jellyfin"],
+                       capture_output=True, text=True)
+    return r.stdout.strip() or sys.exit("no Jellyfin API key in KWallet; run: exsbe-secret jellyfin")
+
+
+def get(server, key, path):
+    req = urllib.request.Request(server + path, headers={"Authorization": f'MediaBrowser Token="{key}"'})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        return json.load(r)
+
+
+# --- where -------------------------------------------------------------------------
+def lan_names():
+    """IP -> name for this PC, cluster nodes and guests (from exsbe-pve's caches)."""
+    names = {}
+    try:
+        out = subprocess.run(["ip", "-4", "-o", "addr"], capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            names[line.split()[3].split("/")[0]] = "this PC"
+    except OSError:
+        pass
+    try:
+        for line in (Path.home() / ".ssh/config.d/exsbe-pve").read_text().split("Host ")[1:]:
+            host, *rest = line.split()
+            if "HostName" in rest:
+                names.setdefault(rest[rest.index("HostName") + 1], host)
+    except (OSError, ValueError):
+        pass
+    return names
+
+
+def rdns(ip):
+    with ThreadPoolExecutor(1) as ex:  # gethostbyaddr has no timeout of its own
+        try:
+            return ex.submit(socket.gethostbyaddr, ip).result(timeout=1)[0].split(".")[0]
+        except Exception:
+            return ""
+
+
+def geo(ips):
+    """Public IP -> {city, region, country, org}; cached for a week, failures for an hour."""
+    path = CACHE / "geoip.json"
+    try:
+        cache = json.loads(path.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    now = time.time()
+    todo = [ip for ip in ips if now - cache.get(ip, {}).get("t", 0) > (604800 if cache.get(ip, {}).get("ok") else 3600)]
+
+    def look(ip):
+        try:
+            with urllib.request.urlopen(f"https://ipinfo.io/{ip}/json", timeout=3) as r:
+                d = json.load(r)
+            return ip, {"ok": True, "t": now, "city": d.get("city", ""), "region": d.get("region", ""),
+                        "country": d.get("country", ""), "org": d.get("org", "")}
+        except Exception:
+            return ip, {"ok": False, "t": now}
+
+    if todo:
+        with ThreadPoolExecutor(4) as ex:
+            cache.update(dict(ex.map(look, todo)))
+        CACHE.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(cache))
+    return cache
+
+
+def where(ip, names, geos):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return {"kind": "unknown", "label": ip or "unknown", "detail": ""}
+    if ip in PROXIES:
+        return {"kind": "proxy", "label": f"via {PROXIES[ip]} · real IP hidden",
+                "detail": "add it to Jellyfin › Networking › Known proxies"}
+    if ip in TAILNET_ROUTER:
+        return {"kind": "tailscale", "label": "Tailscale", "detail": f"via {TAILNET_ROUTER[ip]}"}
+    if addr in ipaddress.ip_network("100.64.0.0/10"):
+        return {"kind": "tailscale", "label": "Tailscale", "detail": ip}
+    if addr in HOME:
+        return {"kind": "lan", "label": "Home", "detail": names.get(ip) or rdns(ip) or ip}
+    if addr.is_private or addr.is_loopback:
+        return {"kind": "lan", "label": "Local network", "detail": ip}
+    g = geos.get(ip, {})
+    place = ", ".join(x for x in (g.get("city"), g.get("region"), g.get("country")) if x)
+    org = " ".join((g.get("org") or "").split()[1:])  # drop the "AS1234" prefix
+    return {"kind": "wan", "label": place or "Internet", "detail": " · ".join(x for x in (org, ip) if x)}
+
+
+# --- how ---------------------------------------------------------------------------
+def streams(item, kind):
+    return [s for s in item.get("MediaStreams") or [] if s.get("Type") == kind]
+
+
+def res(w, h):
+    if not h:
+        return ""
+    return "4K" if h >= 2000 or (w or 0) >= 3800 else f"{h}p" if h in (480, 576, 720, 1080, 1440) else f"{w}×{h}"
+
+
+def mbps(b):
+    return f"{b / 1e6:.1f} Mbps" if b else ""
+
+
+def how(s, item):
+    ps, tc = s.get("PlayState") or {}, s.get("TranscodingInfo")
+    v = (streams(item, "Video") or [{}])[0]
+    ai = ps.get("AudioStreamIndex")
+    a = next((x for x in streams(item, "Audio") if x.get("Index") == ai), (streams(item, "Audio") or [{}])[0])
+    si = ps.get("SubtitleStreamIndex")
+    sub = next((x for x in streams(item, "Subtitle") if x.get("Index") == si), None) if si not in (None, -1) else None
+    src = {"video": " ".join(x for x in (res(v.get("Width"), v.get("Height")), (v.get("Codec") or "").upper(),
+                                          "HDR" if (v.get("VideoRange") or "SDR") != "SDR" else "") if x),
+           "audio": " ".join(x for x in ((a.get("Codec") or "").upper(),
+                                          {1: "mono", 2: "2.0", 6: "5.1", 8: "7.1"}.get(a.get("Channels"), "")) if x),
+           "bitrate": mbps(sum(x.get("BitRate") or 0 for x in (v, a))),
+           "container": (item.get("Container") or "").split(",")[0],
+           "subtitle": (sub or {}).get("DisplayTitle", "")}
+    out = {"method": ps.get("PlayMethod") or "", "source": src, "transcode": None}
+    if tc:
+        out["transcode"] = {
+            "video": "copy" if tc.get("IsVideoDirect") else " ".join(x for x in (
+                res(tc.get("Width"), tc.get("Height")), (tc.get("VideoCodec") or "").upper()) if x),
+            "audio": "copy" if tc.get("IsAudioDirect") else " ".join(x for x in (
+                (tc.get("AudioCodec") or "").upper(), {2: "2.0", 6: "5.1"}.get(tc.get("AudioChannels"), "")) if x),
+            "container": tc.get("Container") or "",
+            "bitrate": mbps(tc.get("Bitrate")),
+            "hw": tc.get("HardwareAccelerationType") or "software",
+            "fps": round(tc.get("Framerate") or 0),
+            "progress": round(tc.get("CompletionPercentage") or 0),
+            "reasons": [r for r in (tc.get("TranscodeReasons") or [])],
+        }
+    return out
+
+
+# --- what --------------------------------------------------------------------------
+def what(item, server):
+    t = item.get("Type")
+    if t == "Episode":
+        title, sub = item.get("SeriesName", ""), " · ".join(x for x in (
+            f'S{item.get("ParentIndexNumber", 0)}E{item.get("IndexNumber", 0)}', item.get("Name", "")) if x)
+        poster = item.get("SeriesId") or item["Id"]
+    elif t == "Audio":
+        title, sub = item.get("Name", ""), " · ".join(x for x in (
+            ", ".join(item.get("Artists") or []), item.get("Album", "")) if x)
+        poster = item.get("AlbumId") or item["Id"]
+    else:
+        title, sub = item.get("Name", ""), str(item.get("ProductionYear") or "")
+        poster = item["Id"]
+    return {"title": title, "subtitle": sub, "type": t, "itemId": item["Id"],
+            "image": f"{server}/Items/{poster}/Images/Primary?maxHeight=180&quality=85"}
+
+
+def status():
+    c = conf()
+    server, key = c["jellyfin"].rstrip("/"), api_key()
+    sessions = get(server, key, "/Sessions?activeWithinSeconds=900")
+    info = get(server, key, "/System/Info")
+    playing = [s for s in sessions if s.get("NowPlayingItem")]
+    names = lan_names()
+    public = [s.get("RemoteEndPoint", "") for s in playing]
+    public = [ip for ip in public if ip and not ipaddress.ip_address(ip).is_private and ip not in PROXIES]
+    geos = geo(public) if public else {}
+    rows = []
+    for s in playing:
+        item, ps = s["NowPlayingItem"], s.get("PlayState") or {}
+        rows.append({
+            "id": s["Id"], "user": s.get("UserName") or "?", "client": s.get("Client", ""),
+            "device": s.get("DeviceName", ""), "ip": s.get("RemoteEndPoint", ""),
+            "paused": bool(ps.get("IsPaused")),
+            "position": (ps.get("PositionTicks") or 0) // TICKS, "runtime": (item.get("RunTimeTicks") or 0) // TICKS,
+            **what(item, server), **how(s, item), "where": where(s.get("RemoteEndPoint", ""), names, geos),
+        })
+    rows.sort(key=lambda r: (r["paused"], r["user"]))
+    users = sorted({s["UserName"] for s in sessions if s.get("UserName")})
+    return {"server": info.get("ServerName", ""), "version": info.get("Version", ""),
+            "web": c["jellyfin_web"], "sessions": rows, "online": users,
+            "transcoding": sum(1 for r in rows if r["transcode"])}
+
+
+def main():
+    a = sys.argv[1:] or ["status"]
+    if a[0] == "status":
+        try:
+            json.dump(status(), sys.stdout)
+        except (OSError, ValueError) as e:
+            json.dump({"error": f"Jellyfin unreachable ({e})"}, sys.stdout)
+    elif a[0] == "web":
+        subprocess.Popen(BROWSER + [f'--app={conf()["jellyfin_web"]}'], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

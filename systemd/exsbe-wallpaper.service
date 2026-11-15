@@ -1,5 +1,5 @@
 [Unit]
-Description=Set time-of-day wallpaper
+Description=Set the wallpaper for the time of day
 
 [Service]
 Type=oneshot

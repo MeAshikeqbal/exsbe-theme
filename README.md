@@ -2,9 +2,27 @@
 
 Graphite KDE Plasma 6 setup for Bazzite built around the Exsbe wallpapers and logo.
 
+<p>
+  <img src="docs/system.png" width="420" alt="System popup: CPU, memory and GPU with graphs and the busiest programs">
+  <br>
+  <img src="docs/dock.png" width="320" alt="Dock tiles: Brave, kitty, VS Code, Dolphin">
+</p>
+
+## Requirements
+
+KDE Plasma 6.5+ (Bazzite), plus Homebrew for the terminal tools. `./install.sh check` lists what is
+installed and what is missing, with where to get it; every install runs the same check for the
+sections it touches and stops only when a core tool is missing.
+
+- fonts: Inter Variable, JetBrainsMono Nerd Font
+- themes: WhiteSur-dark icons, WhiteSur-cursors
+- apps: kitty, fzf, btop, lazygit, fastfetch, zsh (bat and eza optional)
+- containers: podman, lazydocker; lab: jq, tailscale, ssh
+
 ## Install
 
 ```sh
+./install.sh check           # what is installed / missing
 ./install.sh                 # everything (user level, no sudo)
 ./install.sh desktop layout  # or single sections
 cp lab/pve.conf.example ~/.config/exsbe/pve.conf   # once: your cluster's addresses (stays local)
@@ -20,6 +38,9 @@ Everything is self-contained: the `splash` section copies the wallpapers to
 `~/Pictures/Wallpapers/exsbe/` (existing files are kept) and enables the wallpaper timer,
 and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 
+Set your location once in the weather widget (right-click > Configure): the wallpaper and night
+light then follow the real sunrise and sunset there (`exsbe-wallpaper --today` shows the times).
+
 ## What's inside
 
 | Path | What |
@@ -30,10 +51,10 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `icons/gen-folders.sh`, `icons/gen-apps.py` | `Exsbe` icon theme: WhiteSur-dark with graphite folders, graphite dock tiles (Brave, kitty, VS Code, Dolphin) and CPU / memory symbolic glyphs |
 | `layout.js` | top bar + auto-hiding dock |
 | `plasmoid/com.exsbe.workspaces` | icon workspace switcher (Code / Web / Lab / Play) |
-| `plasmoid/com.exsbe.sysmon` | top-bar CPU / RAM / GPU chips (fixed width; GPU dims when idle); popup with 1-minute graphs, temps, clocks, fans, VRAM and top processes |
+| `plasmoid/com.exsbe.sysmon` | top-bar CPU / RAM / GPU chips (fixed width; GPU dims when idle); popup with self-scaling 1-minute graphs, temps, clocks, fans, VRAM and the busiest programs (current CPU, helper processes summed) |
 | `plasmoid/com.exsbe.weather`, `plasmoid/com.exsbe.network` | desktop cards: weather + 7-day forecast (Open-Meteo, no key), network rates with a one-minute graph |
-| `plasmoid/com.exsbe.containers` | Podman / distrobox panel widget |
-| `plasmoid/com.exsbe.proxmox` | Proxmox panel widget: nodes, storage, backups, guests (start / shut down / console / ssh) |
+| `plasmoid/com.exsbe.containers` | Podman / distrobox panel widget: grouped by compose stack / pod (start or stop a whole stack), ports, crashes in red |
+| `plasmoid/com.exsbe.proxmox` | Proxmox panel widget: problems first (amber: worth a look, red: broken), nodes, storage, guests per node (start / shut down / console / ssh) |
 | `bin/exsbe-pve`, `bin/pvepick` | Proxmox CLI (status, actions, consoles, ssh-config, alerts) and the fzf guest picker |
 | `bin/exsbe-pve-setup` | one-time: least-privilege Proxmox users + API tokens, secrets straight into KWallet |
 | `lab/pve.conf.example` | template for `~/.config/exsbe/pve.conf` (local, never committed): endpoints, PBS, LAN, home router MAC, Jellyfin, proxies |
@@ -44,6 +65,7 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `bin/exsbe-pve-keys` | put this PC's SSH key into every container with sshd; host keys read through Proxmox |
 | `bin/exsbe-config-backup` | nightly snapshot of the desktop config into a local git repo; `log`, `diff`, `restore REV` |
 | `bin/exsbe-term`, `kitty/sessions/` | the dock's terminal: tabs per workspace (Code: ~/projects; Lab: shell, btop, pve) |
+| `bin/exsbe-launchers` | keeps the dock launchers themed (VS Code's tile, kitty → exsbe-term) after Homebrew upgrades rewrite them |
 | `mangohud/` | Exsbe MangoHud overlay for every Vulkan game, hidden until Right Shift+F12 |
 | `kwin/exsbe-gamemode` | Play workspace: blur off, dock hidden, Do Not Disturb |
 | `look-and-feel/com.exsbe.desktop` | login splash + one-click global theme |
@@ -51,9 +73,9 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `shell/exsbe.zsh` | fzf, bat, eza and zsh highlighting colours; fastfetch greeting in kitty |
 | `fastfetch/` | system info with the Exsbe logo |
 | `sounds/` | `gen.sh` synthesises the Exsbe chime sound theme |
-| `wallpapers/` | seven designs, each with five time-of-day images (morning → midnight); `exsbe-wallpaper` gives each day of the week a different design, reshuffled weekly (`exsbe-wallpaper --week` shows the line-up) |
+| `wallpapers/` | seven designs, each with five time-of-day images (morning → midnight); `exsbe-wallpaper` gives each day of the week a different design, reshuffled weekly (`--week` shows the line-up), and switches image with the sun: dawn, solar noon, before sunset, after dark (`--today` shows the times) |
 | `plymouth/exsbe` | Plymouth boot theme sources |
-| `systemd/` | wallpaper timer, Proxmox alerts / SSH config timer, game-mode Do Not Disturb helper |
+| `systemd/` | wallpaper timer, launcher watcher, Proxmox alerts / SSH config timer, game-mode Do Not Disturb helper |
 | `rpm/` | Plymouth theme RPM spec and container build |
 
 ## Shortcuts

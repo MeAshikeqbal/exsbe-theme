@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Exsbe desktop theme installer (user level, no sudo).
 # Usage: ./install.sh [section...]   sections: colors desktop apps containers splash workflow polish lab layout
-# With no arguments every section runs in order.
+# With no arguments every section runs in order. ./install.sh check lists what is installed / missing.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 kw() { kwriteconfig6 "$@"; }
@@ -34,9 +34,6 @@ desktop() {
   if [ -d ~/.local/share/icons/WhiteSur-dark ]; then
     "$HERE/icons/gen-folders.sh"   # graphite folders, dock tiles, symbolic glyphs
     kw --file kdeglobals --group Icons --key Theme Exsbe
-    # VS Code's Homebrew launcher points at a PNG, which skips the icon theme (and the Exsbe tile)
-    [ -f ~/.local/share/applications/code.desktop ] &&
-      sed -i 's|^Icon=/.*code\.png$|Icon=code|' ~/.local/share/applications/code.desktop
     rm -f ~/.cache/icon-cache.kcache
   else
     kw --file kdeglobals --group Icons --key Theme WhiteSur-dark
@@ -124,8 +121,12 @@ apps() {
   # per-workspace sessions (Code, Lab); the dock's kitty opens the one for the current workspace
   install -Dm644 -t ~/.config/kitty/sessions "$HERE"/kitty/sessions/*.kitty
   install -Dm755 "$HERE/bin/exsbe-term" ~/.local/bin/exsbe-term
-  [ -f ~/.local/share/applications/kitty.desktop ] &&
-    sed -i "s|^Exec=.*kitty %U$|Exec=$HOME/.local/bin/exsbe-term|" ~/.local/share/applications/kitty.desktop
+  # dock launchers: VS Code's Exsbe tile and kitty -> exsbe-term, re-applied after Homebrew upgrades
+  install -Dm755 "$HERE/bin/exsbe-launchers" ~/.local/bin/exsbe-launchers
+  install -Dm644 -t ~/.config/systemd/user "$HERE/systemd/exsbe-launchers.path" "$HERE/systemd/exsbe-launchers.service"
+  systemctl --user daemon-reload
+  systemctl --user enable --now exsbe-launchers.path
+  ~/.local/bin/exsbe-launchers
 
   # MangoHud: Exsbe overlay, loaded in every Vulkan game but hidden until Right Shift+F12
   install -Dm644 "$HERE/mangohud/MangoHud.conf" ~/.config/MangoHud/MangoHud.conf
@@ -182,7 +183,7 @@ splash() {
   install -Dm644 "$HERE/systemd/exsbe-wallpaper.timer" ~/.config/systemd/user/exsbe-wallpaper.timer
   systemctl --user daemon-reload
   systemctl --user enable --now exsbe-wallpaper.timer
-  ~/.local/bin/exsbe-wallpaper
+  ~/.local/bin/exsbe-wallpaper --force
 }
 
 layout() {
@@ -272,13 +273,11 @@ workflow() {
   kw --file klipperrc --group General --key KeepClipboardContents true
   kw --file klipperrc --group General --key IgnoreSelection true
 
-  # night light, warming with the evening wallpaper at 17:00
+  # night light follows the sun, on the same schedule as the evening wallpaper. Plasma 6.5+ keeps
+  # the schedule in knighttimerc; exsbe-wallpaper fills in the weather widget's location.
   kw --file kwinrc --group NightColor --key Active true
-  kw --file kwinrc --group NightColor --key Mode Times
-  kw --file kwinrc --group NightColor --key EveningBeginFixed 1700
-  kw --file kwinrc --group NightColor --key MorningBeginFixed 0600
-  kw --file kwinrc --group NightColor --key TransitionTime 90
   kw --file kwinrc --group NightColor --key NightTemperature 4200
+  kw --file knighttimerc --group General --key Source Location
 
   qdbus_reconfigure
 }
@@ -403,8 +402,77 @@ lab() {
   fi
 }
 
+# --- dependencies ---------------------------------------------------------------------------------
+# name | kind (cmd, font, icons) | sections that use it (core: every section) | where to get it
+DEPS=(
+  "kwriteconfig6|cmd|core|KDE Plasma 6"
+  "kreadconfig6|cmd|core|KDE Plasma 6"
+  "kpackagetool6|cmd|core|KDE Plasma 6"
+  "busctl|cmd|core|systemd"
+  "python3|cmd|core|rpm-ostree install python3"
+  "plasma-apply-colorscheme|cmd|colors|KDE Plasma 6"
+  "Inter Variable|font|desktop|rsms.me/inter (Inter Variable) into ~/.local/share/fonts"
+  "JetBrainsMono Nerd Font|font|desktop apps|nerdfonts.com (JetBrainsMono) into ~/.local/share/fonts"
+  "WhiteSur-dark|icons|desktop|github.com/vinceliuice/WhiteSur-icon-theme: ./install.sh"
+  "WhiteSur-cursors|icons|desktop|github.com/vinceliuice/WhiteSur-cursors: ./install.sh"
+  "gsettings|cmd|desktop|glib2"
+  "flatpak|cmd|desktop|flatpak"
+  "kitty|cmd|apps containers workflow lab|brew install kitty"
+  "fzf|cmd|apps workflow lab|brew install fzf"
+  "bat|cmd|apps|brew install bat (optional: fzf file previews)"
+  "eza|cmd|apps|brew install eza (optional: ls colours)"
+  "btop|cmd|apps|brew install btop"
+  "lazygit|cmd|apps|brew install lazygit"
+  "fastfetch|cmd|apps|brew install fastfetch"
+  "zsh|cmd|apps|brew install zsh"
+  "mangohud|cmd|apps|ships with Bazzite"
+  "podman|cmd|containers|ships with Bazzite"
+  "lazydocker|cmd|containers|brew install lazydocker"
+  "plasma-apply-wallpaperimage|cmd|splash|KDE Plasma 6"
+  "rsync|cmd|workflow|rpm-ostree install rsync"
+  "git|cmd|workflow|ships with Bazzite"
+  "ssh|cmd|lab|openssh-clients"
+  "jq|cmd|lab|brew install jq"
+  "tailscale|cmd|lab|ships with Bazzite (ujust setup-tailscale)"
+)
+
+has() { # kind name
+  case $1 in
+    cmd) command -v "$2" >/dev/null ;;
+    font) fc-list -q "$2" ;;
+    icons) [ -d ~/.local/share/icons/"$2" ] || [ -d ~/.icons/"$2" ] || [ -d /usr/share/icons/"$2" ] ;;
+  esac
+}
+
+# check [SECTION...]: report what the sections need and is missing; fails when a core tool is missing.
+# `./install.sh check` lists every dependency.
+check() {
+  local verbose=0 want line name kind secs hint s use core_missing=0 missing=0
+  [ $# -eq 0 ] && { verbose=1; set -- core colors desktop apps containers splash workflow polish lab layout; }
+  want=" core $* "
+  for line in "${DEPS[@]}"; do
+    IFS='|' read -r name kind secs hint <<<"$line"
+    use=0
+    for s in $secs; do [[ $want == *" $s "* ]] && use=1; done
+    [ $use = 1 ] || continue
+    if has "$kind" "$name"; then
+      [ $verbose = 1 ] && printf '  \e[32mok\e[0m       %-28s %s\n' "$name" "$secs"
+    else
+      missing=$((missing + 1))
+      [ "$secs" = core ] && core_missing=1
+      printf '  \e[31mmissing\e[0m  %-28s %s  ->  %s\n' "$name" "$secs" "$hint"
+    fi
+  done
+  [ $missing = 0 ] && [ $verbose = 1 ] && echo "  everything is installed"
+  [ $core_missing = 0 ] || { echo "!! core tools are missing; nothing was changed" >&2; return 1; }
+  [ $missing = 0 ] || [ $verbose = 1 ] || echo "   (continuing; the parts that need these are skipped or stay unstyled)"
+}
+
 sections=("$@")
 [ ${#sections[@]} -eq 0 ] && sections=(colors desktop apps containers splash workflow polish lab layout)
+if [ "${sections[*]}" = check ]; then check; exit; fi
+echo "==> checking dependencies"
+check "${sections[@]}"
 for s in "${sections[@]}"; do
   echo "==> $s"
   "$s"

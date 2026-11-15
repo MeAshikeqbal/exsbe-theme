@@ -241,8 +241,57 @@ def shot_wallpapers():
 
 
 def shot_splash():
-    p = ROOT / "plymouth/exsbe"
-    magick(p / "background.png", p / "logo.png", "-gravity", "center", "-composite", "-resize", "1280x720", "-quality", "88", IMG / "splash.jpg")
+    """The splash animation, frame by frame: Splash.qml with its clock stepped by hand (no real-time
+    jitter), grabbed at 20 fps into an animated WebP."""
+    W, H, fps, seconds = 960, 540, 20, 4.4
+    src = ROOT / "look-and-feel/com.exsbe.desktop/contents/splash"
+    splash = TMP / "splash"
+    shutil.copytree(src, splash)
+    qml = splash / "Splash.qml"
+    qml.write_text(re.sub(r"\n\s*NumberAnimation on t \{[^}]*\}", "", qml.read_text()))   # the clock is ours
+    frames = TMP / "frames"
+    frames.mkdir()
+    n = int(seconds * fps)
+    pkg = TMP / "com.exsbe.splashshot"
+    (pkg / "contents/ui").mkdir(parents=True)
+    (pkg / "metadata.json").write_text('{"KPlugin": {"Id": "com.exsbe.splashshot", "Name": "splash shot"}, '
+                                       '"KPackageStructure": "Plasma/Applet", "X-Plasma-API-Minimum-Version": "6.0"}')
+    (pkg / "contents/ui/main.qml").write_text(f"""
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
+PlasmoidItem {{
+    preferredRepresentation: fullRepresentation
+    fullRepresentation: Item {{
+        Layout.minimumWidth: {W}; Layout.minimumHeight: {H}
+        property int frame: 0
+        Item {{ id: box; width: {W}; height: {H}
+            Loader {{ id: ld; anchors.fill: parent; source: "file://{qml}" }} }}
+        function step() {{ ld.item.t = frame / {fps}; settle.start() }}
+        Timer {{ id: settle; interval: 40
+            onTriggered: box.grabToImage(r => {{
+                r.saveToFile("{frames}/f" + String(frame).padStart(4, "0") + ".png")
+                frame++
+                if (frame < {n}) step(); else Qt.quit() }}) }}
+        Timer {{ interval: 1500; running: true; onTriggered: step() }}
+    }}
+}}
+""")
+    subprocess.run(["kpackagetool6", "-t", "Plasma/Applet", "-r", "com.exsbe.splashshot"], capture_output=True)
+    sh("kpackagetool6", "-t", "Plasma/Applet", "-i", pkg, stdout=subprocess.DEVNULL)
+    try:
+        subprocess.run(["plasmawindowed", "com.exsbe.splashshot"], capture_output=True, timeout=seconds * 4 + 30)
+    except subprocess.TimeoutExpired:
+        pass
+    finally:
+        subprocess.run(["kpackagetool6", "-t", "Plasma/Applet", "-r", "com.exsbe.splashshot"], capture_output=True)
+        for f in ("plasmawindowed-appletsrc", "plasmawindowedrc"):
+            (Path.home() / ".config" / f).unlink(missing_ok=True)
+    shots = sorted(frames.glob("f*.png"))
+    if len(shots) < n:
+        sys.exit(f"splash: only {len(shots)} of {n} frames")
+    magick("-delay", 100 // fps, "-loop", "0", *shots, "-resize", "800x", "-define", "webp:lossless=false",
+           "-quality", "82", IMG / "splash.webp")
 
 
 def shot_icons():

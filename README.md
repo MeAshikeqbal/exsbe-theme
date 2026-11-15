@@ -180,11 +180,17 @@ screen arrive together at the real sunset. `exsbe-wallpaper --today` shows today
 
 ### Boot and login splash
 
-<img src="docs/img/splash.jpg" width="640" alt="Boot splash: the Exsbe logo on graphite">
+<img src="docs/img/splash.webp" width="640" alt="Splash animation: the five bars slide into place, the EXSBE wordmark rises, a light runs down the bars">
 
-The same image from power-on to desktop: a Plymouth boot theme (packaged as an RPM for Bazzite's
-read-only system), the Plasma Login Manager greeter in the Exsbe colours, fonts and cursor, and
-the Plasma splash after login. The logo breathes slowly while it loads.
+The Exsbe lockup assembles itself on softly lit graphite: the five bars slide in along their own
+17.63° axis from alternating sides, the wordmark rises into place along its italic slant, then a
+soft light runs down the bars for as long as the system is loading.
+
+The same animation, frame for frame, from power-on to desktop: a Plymouth boot theme (packaged as
+an RPM for Bazzite's read-only system, with a themed passphrase prompt and boot messages), the
+login screen on the same graphite, and the Plasma splash after login. Bars and letters are cut
+from [plymouth/logo.svg](plymouth/logo.svg) by `plymouth/gen.py`, so a logo change is one command
+away.
 
 ### Colours, terminal and apps
 
@@ -267,7 +273,7 @@ The boot splash and login screen are system-level and need root:
 
 ```sh
 rpm/build.sh                 # build the Plymouth theme RPM in a throwaway container
-sudo ./install-boot.sh       # layer it and theme the login screen; then reboot
+sudo ./install-boot.sh       # layer it (or replace an older build) and theme the login screen; reboot
 ```
 
 Wallpapers are copied to `~/Pictures/Wallpapers/exsbe/` (existing files are kept). After
@@ -341,6 +347,8 @@ All user units; nothing runs as root.
   `workflow` section of `install.sh`; terminal sessions in `kitty/sessions/<workspace>.kitty`.
 - **Colours**: `colors/gen-colors.sh` (scheme), `plasma-style/gen.py` (Plasma style),
   `icons/gen-folders.sh` and `icons/gen-apps.py` (icon theme), `sounds/gen.sh` (chimes).
+- **Logo / splash**: replace `plymouth/logo.svg` (keep one element per bar and wordmark shape),
+  run `plymouth/gen.py`, then `./install.sh splash`, `rpm/build.sh` and `sudo ./install-boot.sh`.
 - **Wallpapers**: add a folder with `1-morning` … `5-midnight` images to `wallpapers/` and run
   `./install.sh splash`; the weekly shuffle picks it up.
 
@@ -369,7 +377,7 @@ All user units; nothing runs as root.
 | `lab/pve.conf.example` | template for `~/.config/exsbe/pve.conf` (local, never committed) |
 | `systemd/` | the user units above |
 | `kitty/`, `konsole/`, `btop/`, `lazygit/`, `lazydocker/`, `fastfetch/`, `mangohud/`, `shell/` | app themes and configs |
-| `look-and-feel/`, `plymouth/`, `rpm/` | Plasma splash and global theme; Plymouth theme and its RPM build |
+| `look-and-feel/`, `plymouth/`, `rpm/` | Plasma splash and global theme; the logo source, splash image generator, Plymouth theme and its RPM build |
 | `sounds/` | the Exsbe chime sound theme and its generator |
 | `wallpapers/` | seven designs × five times of day |
 | `docs/` | screenshots, their sample data and the script that renders them |
@@ -382,7 +390,8 @@ docs/shoot.py system topbar    # or some: topbar system containers proxmox jelly
                                #          wallpapers splash icons palette
 ```
 
-Each widget is installed as a temporary copy, opened in its own window for a few seconds and
+The splash is rendered frame by frame from its own QML with the clock stepped by hand. Each
+widget is installed as a temporary copy, opened in its own window for a few seconds and
 grabs itself, so the images are exactly what Plasma draws with the installed theme. The lab,
 media and container widgets read [docs/sample.py](docs/sample.py) instead of the real commands,
 and the weather card shows Lisbon, so no real names, addresses or places end up in the repository.

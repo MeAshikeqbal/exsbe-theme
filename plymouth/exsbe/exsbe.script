@@ -1,19 +1,140 @@
-Window.SetBackgroundTopColor(0.15, 0.15, 0.16);
-Window.SetBackgroundBottomColor(0.15, 0.15, 0.16);
+# Exsbe boot splash. The same animation as the splash after login
+# (look-and-feel/com.exsbe.desktop/contents/splash/Splash.qml): the five bars slide in along their
+# own 17.63 degree axis from alternating sides, the wordmark rises into place along its italic
+# slant, then a soft light runs down the bars while the system boots. Everything is a function of
+# one clock, t (seconds), so both splashes stay alike. Images come from plymouth/gen.py.
+# Also: disk passphrase / question prompts and boot messages, below the logo.
 
-bg = Image("background.png");
-bg_sprite = Sprite(bg.Scale(Window.GetWidth(), Window.GetHeight()));
-bg_sprite.SetZ(-100);
+Window.SetBackgroundTopColor(0.094, 0.094, 0.106);
+Window.SetBackgroundBottomColor(0.094, 0.094, 0.106);
 
-logo = Image("logo.png");
-logo_sprite = Sprite(logo);
-logo_sprite.SetX(Window.GetWidth() / 2 - logo.GetWidth() / 2);
-logo_sprite.SetY(Window.GetHeight() / 2 - logo.GetHeight() / 2);
+sw = Window.GetWidth();
+sh = Window.GetHeight();
+ox = Window.GetX();
+oy = Window.GetY();
 
-# gentle breathing pulse
-frame = 0;
-fun refresh_callback() {
-  frame++;
-  logo_sprite.SetOpacity(0.78 + 0.22 * Math.Sin(frame / 18));
+bg_sprite = Sprite(Image("background.png").Scale(sw, sh));
+bg_sprite.SetPosition(ox, oy, -100);
+
+# the lockup: a third of the screen wide, centred (proportions of plymouth/logo.svg)
+lw = Math.Int(sw * 0.34);
+lh = Math.Int(lw * 354 / 1357);
+lx = ox + Math.Int((sw - lw) / 2);
+ly = oy + Math.Int((sh - lh) / 2);
+
+dirx = 0.953;   # the bars' long axis: cos / sin 17.63 degrees
+diry = 0.303;
+pi = 3.14159265;
+
+bar_file[0] = "bar-1.png"; bar_file[1] = "bar-2.png"; bar_file[2] = "bar-3.png";
+bar_file[3] = "bar-4.png"; bar_file[4] = "bar-5.png";
+side[0] = -1; side[1] = 1; side[2] = -1; side[3] = 1; side[4] = -1;
+word_file[0] = "word-1.png"; word_file[1] = "word-2.png"; word_file[2] = "word-3.png"; word_file[3] = "word-4.png";
+
+i = 0;
+while (i < 5) {
+  bar[i] = Sprite(Image(bar_file[i]).Scale(lw, lh));
+  bar[i].SetPosition(lx, ly, 10);
+  bar[i].SetOpacity(0);
+  i++;
 }
-Plymouth.SetRefreshFunction(refresh_callback);
+j = 0;
+while (j < 4) {
+  word[j] = Sprite(Image(word_file[j]).Scale(lw, lh));
+  word[j].SetPosition(lx, ly, 10);
+  word[j].SetOpacity(0);
+  j++;
+}
+
+# --- timing (keep in step with Splash.qml) ---------------------------------------------------------
+fun clamp01(x) {
+  if (x < 0) { return 0; }
+  if (x > 1) { return 1; }
+  return x;
+}
+fun ease_out(p) {
+  q = 1 - clamp01(p);
+  return 1 - q * q * q;
+}
+# bar i (0 = top): starts at 0.15 + 0.12 i s, takes 0.7 s
+fun bar_p(i, t) { return ease_out((t - 0.15 - 0.12 * i) / 0.7); }
+# after the intro, a light runs down the bars every 2.2 s
+fun bar_glow(i, t) {
+  idle = clamp01((t - 1.8) / 0.6);
+  c = Math.Cos((t - 1.8) * 2 * pi / 2.2 - i * 0.8);
+  w = 0;
+  if (c > 0) { w = c * c; }
+  return (1 - idle) + idle * (0.6 + 0.4 * w);
+}
+# wordmark shape j (0 = left): rises along the italic slant from 0.8 + 0.09 j s, in 0.6 s
+fun word_p(j, t) { return ease_out((t - 0.8 - 0.09 * j) / 0.6); }
+
+frame = 0;
+fun refresh() {
+  global.frame = global.frame + 1;
+  t = global.frame / 50;   # Plymouth refreshes 50 times a second
+  i = 0;
+  while (i < 5) {
+    p = bar_p(i, t);
+    shift = (1 - p) * side[i] * 0.18 * lw;
+    bar[i].SetX(lx + shift * dirx);
+    bar[i].SetY(ly + shift * diry);
+    bar[i].SetOpacity(p * bar_glow(i, t));
+    i++;
+  }
+  j = 0;
+  while (j < 4) {
+    p = word_p(j, t);
+    shift = (1 - p) * 0.22 * lh;
+    word[j].SetX(lx - shift * diry);
+    word[j].SetY(ly + shift * dirx);
+    word[j].SetOpacity(p * 0.95);
+    j++;
+  }
+}
+Plymouth.SetRefreshFunction(refresh);
+
+# --- prompts and messages, centred under the logo ----------------------------------------------
+prompt_sprite = Sprite();
+entry_sprite = Sprite();
+message_sprite = Sprite();
+
+fun centre_text(sprite, text, font, y, alpha) {
+  if (text == "") { text = " "; }
+  img = Image.Text(text, 0.90, 0.90, 0.92, alpha, font);
+  sprite.SetImage(img);
+  sprite.SetPosition(ox + Math.Int((sw - img.GetWidth()) / 2), y, 20);
+  sprite.SetOpacity(1);
+}
+
+fun show_dialog(prompt, entry) {
+  centre_text(prompt_sprite, prompt, "Sans 12", ly + lh + Math.Int(lh * 0.55), 0.75);
+  centre_text(entry_sprite, entry, "Sans 16", ly + lh + Math.Int(lh * 0.55) + 36, 1);
+}
+
+fun display_password(prompt, bullets) {
+  dots = "";
+  n = 0;
+  while (n < bullets) {
+    dots = dots + "•";
+    n++;
+  }
+  if (prompt == "") { prompt = "Passphrase"; }
+  show_dialog(prompt, dots);
+}
+Plymouth.SetDisplayPasswordFunction(display_password);
+
+fun display_question(prompt, entry) { show_dialog(prompt, entry); }
+Plymouth.SetDisplayQuestionFunction(display_question);
+
+fun display_normal() {
+  prompt_sprite.SetOpacity(0);
+  entry_sprite.SetOpacity(0);
+}
+Plymouth.SetDisplayNormalFunction(display_normal);
+
+fun display_message(text) { centre_text(message_sprite, text, "Sans 11", oy + Math.Int(sh * 0.88), 0.6); }
+Plymouth.SetMessageFunction(display_message);
+
+fun hide_message(text) { message_sprite.SetOpacity(0); }
+Plymouth.SetHideMessageFunction(hide_message);

@@ -21,7 +21,15 @@ for d in "${dirs[@]}"; do
 done
 
 python3 "$(dirname "$0")/gen-apps.py" "$out" >/dev/null
-dirs+=(apps/scalable status/symbolic)
+
+# Asked for "go-home-symbolic", KDE takes this theme's recoloured go-home.svg (a blue folder) before
+# it looks in WhiteSur, so bring along WhiteSur's symbolic version of every icon recoloured above.
+mkdir -p "$out/places/symbolic"
+while IFS= read -r f; do
+  n=$(basename "$f" -symbolic.svg)
+  compgen -G "$out/places/*/$n.svg" >/dev/null && cp -L "$f" "$out/places/symbolic/"
+done < <(find "$src" -path '*/symbolic/*' -name '*-symbolic.svg')
+dirs+=(places/symbolic apps/scalable status/symbolic)
 
 {
   echo "[Icon Theme]"

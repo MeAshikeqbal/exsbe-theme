@@ -127,36 +127,44 @@ PlasmoidItem {
 
     fullRepresentation: PlasmaExtras.Representation {
         Layout.minimumWidth: Kirigami.Units.gridUnit * 28
-        Layout.minimumHeight: Kirigami.Units.gridUnit * 16
-        Layout.preferredHeight: Kirigami.Units.gridUnit * 26
+        // short while idle, room for the stream cards while something plays
+        Layout.minimumHeight: Kirigami.Units.gridUnit * (root.playing ? 16 : 11)
+        Layout.preferredHeight: Kirigami.Units.gridUnit * (root.playing ? 26 : 13)
         collapseMarginsHint: true
 
         header: PlasmaExtras.PlasmoidHeading {
             RowLayout {
                 anchors.fill: parent
-                Kirigami.Heading {
-                    level: 3
-                    text: "Jellyfin"
-                    Layout.leftMargin: Kirigami.Units.smallSpacing
-                }
-                PlasmaComponents3.Label {
+                ColumnLayout {
+                    spacing: 0
                     Layout.fillWidth: true
-                    opacity: 0.6
-                    elide: Text.ElideRight
-                    text: root.error !== "" ? "unreachable"
-                        : root.playing + " playing" + (root.transcoding ? " · " + root.transcoding + " transcoding" : "")
-                          + " · online: " + (root.info.online.join(", ") || "nobody")
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Kirigami.Heading { level: 3; text: "Jellyfin" }
+                    PlasmaComponents3.Label {
+                        Layout.fillWidth: true
+                        font: Kirigami.Theme.smallFont
+                        elide: Text.ElideRight
+                        color: root.error !== "" ? Kirigami.Theme.negativeTextColor
+                             : root.transcoding ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.textColor
+                        opacity: root.error !== "" || root.transcoding ? 1 : 0.6
+                        text: root.error !== "" ? "unreachable"
+                            : root.playing === 0 ? "nothing playing"
+                            : root.playing + (root.playing === 1 ? " stream" : " streams")
+                              + (root.transcoding ? " · " + root.transcoding + " transcoding" : " · all direct")
+                    }
                 }
                 PlasmaComponents3.ToolButton {
-                    icon.name: "internet-web-browser"
+                    icon.name: "internet-web-browser-symbolic"
                     display: PlasmaComponents3.AbstractButton.IconOnly
                     PlasmaComponents3.ToolTip.text: "Open Jellyfin"
                     PlasmaComponents3.ToolTip.visible: hovered
                     onClicked: { root.run("exsbe-jellyfin web"); root.expanded = false }
                 }
                 PlasmaComponents3.ToolButton {
-                    icon.name: "view-refresh"
+                    icon.name: "view-refresh-symbolic"
                     display: PlasmaComponents3.AbstractButton.IconOnly
+                    PlasmaComponents3.ToolTip.text: "Refresh"
+                    PlasmaComponents3.ToolTip.visible: hovered
                     onClicked: root.refresh()
                 }
             }
@@ -173,11 +181,47 @@ PlasmoidItem {
 
                 PlasmaExtras.PlaceholderMessage {
                     anchors.centerIn: parent
+                    anchors.verticalCenterOffset: list.headerItem ? list.headerItem.height / 2 : 0
                     width: parent.width - Kirigami.Units.gridUnit * 2
                     visible: list.count === 0
-                    iconName: "video-television"
+                    iconName: root.error !== "" ? "network-disconnect-symbolic" : "exsbe-jellyfin-symbolic"
                     text: root.error !== "" ? root.error : "Nothing playing"
-                    explanation: root.error === "" && root.info.online.length ? "Online: " + root.info.online.join(", ") : ""
+                    explanation: root.error !== "" ? "" : "Streams show up here as they start"
+                }
+
+                // who is signed in right now
+                header: Flow {
+                    width: ListView.view.width
+                    visible: root.error === "" && root.info.online.length > 0
+                    height: visible ? implicitHeight + Kirigami.Units.smallSpacing * 2 : 0
+                    padding: Kirigami.Units.smallSpacing
+                    leftPadding: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.smallSpacing
+                    PlasmaComponents3.Label {
+                        text: "Online"
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        opacity: 0.5
+                        height: Kirigami.Units.gridUnit * 1.2
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    Repeater {
+                        model: root.info.online
+                        delegate: Rectangle {
+                            required property string modelData
+                            radius: height / 2
+                            color: Qt.alpha(Kirigami.Theme.textColor, 0.07)
+                            implicitWidth: userRow.implicitWidth + Kirigami.Units.largeSpacing
+                            implicitHeight: Kirigami.Units.gridUnit * 1.2
+                            width: implicitWidth; height: implicitHeight
+                            RowLayout {
+                                id: userRow
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Rectangle { width: 6; height: 6; radius: 3; color: Kirigami.Theme.positiveTextColor }
+                                PlasmaComponents3.Label { text: modelData; font.pointSize: Kirigami.Theme.smallFont.pointSize }
+                            }
+                        }
+                    }
                 }
 
                 delegate: Item {
@@ -220,7 +264,7 @@ PlasmoidItem {
                             Kirigami.Icon {
                                 anchors.centerIn: parent
                                 visible: card.model.paused
-                                source: "media-playback-pause"
+                                source: "media-playback-pause-symbolic"
                                 width: Kirigami.Units.iconSizes.medium
                                 height: width
                             }
@@ -248,7 +292,7 @@ PlasmoidItem {
                                 spacing: Kirigami.Units.smallSpacing
                                 Layout.topMargin: 2
                                 Kirigami.Icon {
-                                    source: "user-identity"
+                                    source: "user-identity-symbolic"
                                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
                                 }
@@ -277,7 +321,8 @@ PlasmoidItem {
                                 }
                                 PlasmaComponents3.Label {
                                     text: root.hms(card.model.position) + (card.model.runtime ? " / " + root.hms(card.model.runtime) : "")
-                                    font: Kirigami.Theme.smallFont
+                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                    font.features: { "tnum": 1 }
                                     opacity: 0.65
                                 }
                             }
@@ -330,7 +375,7 @@ PlasmoidItem {
                                 spacing: Kirigami.Units.smallSpacing
                                 Layout.topMargin: 2
                                 Kirigami.Icon {
-                                    source: ({ lan: "go-home", tailscale: "network-vpn", wan: "globe", proxy: "dialog-warning" })[card.model.whereKind] || "network-wired"
+                                    source: ({ lan: "go-home-symbolic", tailscale: "network-vpn-symbolic", wan: "globe-symbolic", proxy: "dialog-warning-symbolic" })[card.model.whereKind] || "network-wired-symbolic"
                                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
                                 }

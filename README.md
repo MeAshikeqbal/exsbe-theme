@@ -17,7 +17,7 @@ sudo ./install-boot.sh       # boot splash + login screen (build first: rpm/buil
 Sections: `colors` `desktop` `apps` `containers` `splash` `workflow` `polish` `lab` `layout`.
 
 Everything is self-contained: the `splash` section copies the wallpapers to
-`~/Pictures/Wallpapers/exsbe/` (existing files are kept) and enables the time-of-day timer,
+`~/Pictures/Wallpapers/exsbe/` (existing files are kept) and enables the wallpaper timer,
 and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 
 ## What's inside
@@ -51,7 +51,7 @@ and `rpm/build.sh` builds the boot splash from `plymouth/exsbe/`.
 | `shell/exsbe.zsh` | fzf, bat, eza and zsh highlighting colours; fastfetch greeting in kitty |
 | `fastfetch/` | system info with the Exsbe logo |
 | `sounds/` | `gen.sh` synthesises the Exsbe chime sound theme |
-| `wallpapers/` | five time-of-day wallpapers (morning → midnight) |
+| `wallpapers/` | seven designs, each with five time-of-day images (morning → midnight); `exsbe-wallpaper` gives each day of the week a different design, reshuffled weekly (`exsbe-wallpaper --week` shows the line-up) |
 | `plymouth/exsbe` | Plymouth boot theme sources |
 | `systemd/` | wallpaper timer, Proxmox alerts / SSH config timer, game-mode Do Not Disturb helper |
 | `rpm/` | Plymouth theme RPM spec and container build |

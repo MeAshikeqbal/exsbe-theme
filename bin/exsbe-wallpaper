@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
-# Set the wallpaper for the current time of day.
+# Set the wallpaper for today's design and the current time of day.
+# Each design is a folder of five time-of-day images. Every week the designs
+# are shuffled, so each day of the week gets a different one. The shuffle is
+# seeded by the ISO week, so it stays the same across reboots and timer runs.
+#   exsbe-wallpaper           apply today's design
+#   exsbe-wallpaper --week    show this week's line-up
 dir="$HOME/Pictures/Wallpapers/exsbe"
+week=$(date +%G-W%V)
+
+mapfile -t designs < <(
+  for d in "$dir"/*/; do
+    d=${d%/}; d=${d##*/}
+    printf '%s %s\n' "$(printf '%s/%s' "$week" "$d" | md5sum | cut -c1-12)" "$d"
+  done | sort | cut -d' ' -f2
+)
+(( ${#designs[@]} )) || { echo "exsbe-wallpaper: no designs in $dir" >&2; exit 1; }
+
+if [[ ${1:-} == --week ]]; then
+  days=(Mon Tue Wed Thu Fri Sat Sun)
+  for i in "${!days[@]}"; do printf '%s  %s\n' "${days[i]}" "${designs[i % ${#designs[@]}]}"; done
+  exit 0
+fi
+
+design=${designs[($(date +%u) - 1) % ${#designs[@]}]}
+
 h=$((10#$(date +%H)))
 if   (( h >= 6  && h < 12 )); then f=1-morning
 elif (( h >= 12 && h < 17 )); then f=2-afternoon
@@ -8,7 +31,11 @@ elif (( h >= 17 && h < 21 )); then f=3-evening
 elif (( h >= 21 ));           then f=4-night
 else                               f=5-midnight
 fi
+
+img=$(ls "$dir/$design/$f".* 2>/dev/null | head -n1)
+[[ -n $img ]] || { echo "exsbe-wallpaper: missing $dir/$design/$f.*" >&2; exit 1; }
+
 # lock screen follows the same image
 kwriteconfig6 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image \
-  --group General --key Image "file://$dir/$f.png"
-exec plasma-apply-wallpaperimage "$dir/$f.png"
+  --group General --key Image "file://$img"
+exec plasma-apply-wallpaperimage "$img"

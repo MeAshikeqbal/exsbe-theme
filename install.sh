@@ -173,9 +173,10 @@ splash() {
   kw --file ksplashrc --group KSplash --key Theme com.exsbe.desktop
   kw --file kdeglobals --group KDE --key LookAndFeelPackage com.exsbe.desktop
 
-  # time-of-day wallpapers (desktop + lock screen), switched by a user timer
+  # wallpapers (desktop + lock screen): a different design each day of the week, reshuffled
+  # weekly, and the time-of-day variant switched by a user timer
   mkdir -p ~/Pictures/Wallpapers/exsbe
-  cp -n "$HERE"/wallpapers/*.png ~/Pictures/Wallpapers/exsbe/
+  cp -rn "$HERE"/wallpapers/*/ ~/Pictures/Wallpapers/exsbe/
   install -Dm755 "$HERE/bin/exsbe-wallpaper" ~/.local/bin/exsbe-wallpaper
   install -Dm644 "$HERE/systemd/exsbe-wallpaper.service" ~/.config/systemd/user/exsbe-wallpaper.service
   install -Dm644 "$HERE/systemd/exsbe-wallpaper.timer" ~/.config/systemd/user/exsbe-wallpaper.timer

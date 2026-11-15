@@ -80,8 +80,8 @@ PlasmoidItem {
     fullRepresentation: Item {
         Layout.minimumWidth: Kirigami.Units.gridUnit * 18
         Layout.minimumHeight: Kirigami.Units.gridUnit * 14
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 22
-        Layout.preferredHeight: Kirigami.Units.gridUnit * 22
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 28
+        Layout.preferredHeight: Kirigami.Units.gridUnit * 17
 
         ColumnLayout {
             anchors.fill: parent
@@ -150,6 +150,9 @@ PlasmoidItem {
                 }
             }
 
+            // pushes the forecast to the bottom edge instead of floating mid-card
+            Item { Layout.fillHeight: true }
+
             // forecast
             Rectangle {
                 Layout.fillWidth: true
@@ -158,7 +161,6 @@ PlasmoidItem {
             }
             RowLayout {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
                 spacing: 0
                 Repeater {
                     model: root.days
@@ -172,7 +174,8 @@ PlasmoidItem {
                             text: index === 0 ? "Today" : Qt.formatDate(modelData.date, "ddd")
                             font: Kirigami.Theme.smallFont
                             opacity: index === 0 ? 1 : 0.6
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                         }
                         Kirigami.Icon {
                             source: root.info(modelData.code, 1)[1]
@@ -185,19 +188,22 @@ PlasmoidItem {
                         PlasmaComponents3.Label {
                             text: Math.round(modelData.max) + "°"
                             font.features: { "tnum": 1 }
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                         }
                         PlasmaComponents3.Label {
                             text: Math.round(modelData.min) + "°"
                             opacity: 0.5
                             font: Kirigami.Theme.smallFont
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                         }
                         PlasmaComponents3.Label {
                             text: modelData.rain > 0 ? modelData.rain + "%" : ""
                             color: Kirigami.Theme.highlightColor
                             font: Kirigami.Theme.smallFont
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                         }
                     }
                 }

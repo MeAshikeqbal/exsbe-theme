@@ -21,6 +21,7 @@ PlasmoidItem {
 
     property var downHist: []
     property var upHist: []
+    readonly property real peak: Math.max(1024, ...downHist, ...upHist)
     function push(arr, v) { const a = arr.concat([v]); return a.length > historyLength ? a.slice(a.length - historyLength) : a }
     Timer {
         interval: 1000
@@ -73,7 +74,15 @@ PlasmoidItem {
                 Item { Layout.fillWidth: true }
             }
 
-            // both rates on one graph, scaled to the busier one
+            // scale sits above the graph so it never collides with a spike
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.bottomMargin: -Kirigami.Units.smallSpacing
+                PlasmaComponents3.Label { text: "last minute"; font: Kirigami.Theme.smallFont; opacity: 0.4; Layout.fillWidth: true }
+                PlasmaComponents3.Label { text: "peak " + root.rate(root.peak); font.pointSize: Kirigami.Theme.smallFont.pointSize; opacity: 0.4; font.features: { "tnum": 1 } }
+            }
+
+            // both rates on one graph, scaled to the busier one (top line = peak)
             Canvas {
                 id: graph
                 Layout.fillWidth: true
@@ -87,8 +96,8 @@ PlasmoidItem {
                     const w = width, h = height, n = root.historyLength
                     ctx.strokeStyle = Qt.alpha(Kirigami.Theme.textColor, 0.08)
                     ctx.lineWidth = 1
-                    for (const f of [0.25, 0.5, 0.75]) { ctx.beginPath(); ctx.moveTo(0, h * f); ctx.lineTo(w, h * f); ctx.stroke() }
-                    const peak = Math.max(1024, ...root.downHist, ...root.upHist)
+                    for (const f of [0, 0.25, 0.5, 0.75]) { const gy = Math.round(h * f) + 0.5; ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke() }
+                    const peak = root.peak
                     for (const [vals, col] of series) {
                         if (vals.length < 2) continue
                         const x = i => w - (vals.length - 1 - i) * (w / (n - 1))
@@ -106,10 +115,6 @@ PlasmoidItem {
                         ctx.lineWidth = 1.5
                         ctx.stroke()
                     }
-                    // scale label
-                    ctx.fillStyle = Qt.alpha(Kirigami.Theme.textColor, 0.4)
-                    ctx.font = Kirigami.Theme.smallFont.pixelSize + "px sans-serif"
-                    ctx.fillText(root.rate(peak), 4, 12)
                 }
             }
         }

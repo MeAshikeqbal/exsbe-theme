@@ -2,6 +2,7 @@
 // `exsbe-pve status`. Only shown (and only polling) while the Lab workspace is current.
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.plasma5support as P5Support
@@ -17,7 +18,8 @@ PlasmoidItem {
 
     property var snap: null
     property string error: ""
-    property var issues: []
+    property var issues: []          // [{ text, level }], level 2 = broken, 1 = worth a look
+    readonly property int worst: issues.reduce((m, i) => Math.max(m, i.level), 0)
     property date updated: new Date(0)
 
     readonly property bool onLab: desktops.desktopNames[desktops.desktopIds.indexOf(desktops.currentDesktop)] === workspace
@@ -34,6 +36,13 @@ PlasmoidItem {
              : b >= 1073741824 ? (b / 1073741824).toFixed(b >= 10737418240 ? 0 : 1) + " GiB"
              : Math.round(b / 1048576) + " MiB"
     }
+    function pair(used, total) {
+        const tib = total >= 1099511627776, d = tib ? 1099511627776 : 1073741824
+        const f = v => total / d >= 100 ? String(Math.round(v)) : (Math.round(v * 10) / 10).toFixed(1)
+        return f(used / d) + " / " + f(total / d) + (tib ? " TiB" : " GiB")
+    }
+    function usageColor(x) { return x >= warn ? Kirigami.Theme.negativeTextColor : x >= 0.75 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor }
+    function levelColor(l) { return l >= 2 ? Kirigami.Theme.negativeTextColor : l === 1 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor }
     function dur(s) { return s < 3600 ? Math.round(s / 60) + " min" : s < 86400 ? Math.round(s / 3600) + " h" : Math.round(s / 86400) + " d" }
 
     function parse(stdout) {
@@ -42,17 +51,25 @@ PlasmoidItem {
         if (s.error) { error = s.error; return }
         error = ""
         const list = []
-        for (const n of s.nodes) if (n.status !== "online") list.push("Node " + n.name + " is " + n.status)
-        if (!s.quorate) list.push("Cluster has lost quorum")
-        for (const st of s.storage) if (st.used / st.total >= warn) list.push(st.name + " is " + pct(st.used / st.total) + " full")
-        for (const b of s.backup.failed) list.push("Backup " + (b.id || "job") + " on " + b.node + " failed")
-        const pbs = s.pbs
-        if (pbs && pbs.error) list.push("Backup server unreachable")
-        else if (pbs) {
-            for (const st of pbs.stores) if (st.total && st.used / st.total >= warn) list.push("PBS " + st.name + " is " + pct(st.used / st.total) + " full")
-            for (const j of pbs.jobs) if (j.state && j.state.toLowerCase() !== "ok") list.push("PBS " + j.kind + " job " + j.id + " failed")
-            for (const t of pbs.failed) list.push("PBS " + t.type + " " + t.id + " failed")
+        for (const n of s.nodes) if (n.status !== "online") list.push({ level: 2, text: "Node " + n.name + " is " + n.status })
+        if (!s.quorate) list.push({ level: 2, text: "Cluster has lost quorum" })
+        for (const st of s.storage) if (st.total && st.used / st.total >= warn) list.push({ level: 2, text: st.name + " is " + pct(st.used / st.total) + " full" })
+        const bk = s.backup
+        for (const f of bk.failed) {
+            // a failure that a later successful run has superseded is only worth a look
+            const later = bk.last && f.end && bk.last > f.end && String(bk.lastStatus).toUpperCase() === "OK"
+            list.push({ level: later ? 1 : 2,
+                        text: "Backup" + (f.id ? " " + f.id : "") + " on " + f.node + " failed" + (f.end ? " " + dur(Date.now() / 1000 - f.end) + " ago" : "")
+                              + (f.status ? " (" + f.status + ")" : "") + (later ? " · later run OK" : "") })
         }
+        const pbs = s.pbs
+        if (pbs && pbs.error) list.push({ level: 2, text: "Backup server unreachable" })
+        else if (pbs) {
+            for (const st of pbs.stores) if (st.total && st.used / st.total >= warn) list.push({ level: 2, text: "PBS " + st.name + " is " + pct(st.used / st.total) + " full" })
+            for (const j of pbs.jobs) if (j.state && j.state.toLowerCase() !== "ok") list.push({ level: 2, text: "PBS " + j.kind + " job " + j.id + " failed" })
+            for (const t of pbs.failed) list.push({ level: 2, text: "PBS " + t.type + " " + t.id + " failed" })
+        }
+        list.sort((x, y) => y.level - x.level)
         issues = list
         s.guests = s.guests.filter(g => !g.template)
         snap = s
@@ -97,9 +114,10 @@ PlasmoidItem {
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: Kirigami.Units.longDuration } }
 
-        // the card: solid enough to read over any wallpaper
+        // the card: solid enough to read over any wallpaper, and only as tall as what it shows
         Rectangle {
-            anchors.fill: parent
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            height: body.height + Kirigami.Units.gridUnit * 2
             radius: 18
             color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.92)
             border.color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
@@ -107,8 +125,9 @@ PlasmoidItem {
         }
 
         ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: Kirigami.Units.gridUnit
+            id: body
+            anchors { top: parent.top; left: parent.left; right: parent.right; margins: Kirigami.Units.gridUnit }
+            height: Math.min(implicitHeight, parent.height - Kirigami.Units.gridUnit * 2)
             spacing: Kirigami.Units.largeSpacing
 
             // header
@@ -137,15 +156,16 @@ PlasmoidItem {
                 }
                 Rectangle {
                     readonly property bool ok: root.error === "" && root.issues.length === 0
+                    readonly property color tone: root.error !== "" ? Kirigami.Theme.negativeTextColor : root.levelColor(root.worst)
                     radius: height / 2
-                    color: Qt.alpha(ok ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor, 0.18)
+                    color: Qt.alpha(tone, 0.18)
                     implicitWidth: pill.implicitWidth + Kirigami.Units.gridUnit
                     implicitHeight: pill.implicitHeight + Kirigami.Units.smallSpacing * 2
                     PlasmaComponents3.Label {
                         id: pill
                         anchors.centerIn: parent
                         font.weight: Font.DemiBold
-                        color: parent.ok ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                        color: parent.tone
                         text: root.error !== "" ? "Offline" : parent.ok ? "All good"
                             : root.issues.length + (root.issues.length === 1 ? " issue" : " issues")
                     }
@@ -154,12 +174,12 @@ PlasmoidItem {
 
             // problems first
             Repeater {
-                model: root.error !== "" ? [root.error] : root.issues
+                model: root.error !== "" ? [{ level: 2, text: root.error }] : root.issues
                 delegate: Rectangle {
-                    required property string modelData
+                    required property var modelData
                     Layout.fillWidth: true
                     radius: 10
-                    color: Qt.alpha(Kirigami.Theme.negativeTextColor, 0.14)
+                    color: Qt.alpha(root.levelColor(modelData.level), 0.14)
                     implicitHeight: issueRow.implicitHeight + Kirigami.Units.largeSpacing
                     RowLayout {
                         id: issueRow
@@ -167,13 +187,13 @@ PlasmoidItem {
                         anchors.leftMargin: Kirigami.Units.largeSpacing
                         anchors.rightMargin: Kirigami.Units.largeSpacing
                         Kirigami.Icon {
-                            source: "dialog-warning"
+                            source: modelData.level >= 2 ? "dialog-error" : "dialog-warning"
                             Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                             Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                         }
                         PlasmaComponents3.Label {
-                            text: modelData
-                            color: Kirigami.Theme.negativeTextColor
+                            text: modelData.text
+                            color: root.levelColor(modelData.level)
                             font.weight: Font.DemiBold
                             wrapMode: Text.Wrap
                             Layout.fillWidth: true
@@ -228,9 +248,10 @@ PlasmoidItem {
                     RowLayout {
                         PlasmaComponents3.Label { text: modelData.name; Layout.fillWidth: true }
                         PlasmaComponents3.Label {
-                            text: root.gib(modelData.used) + " / " + root.gib(modelData.total) + " · " + root.pct(modelData.used / modelData.total)
-                            color: modelData.used / modelData.total >= root.warn ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
-                            opacity: modelData.used / modelData.total >= root.warn ? 1 : 0.65
+                            text: root.pair(modelData.used, modelData.total) + " · " + root.pct(modelData.used / modelData.total)
+                            font.features: { "tnum": 1 }
+                            color: modelData.used / modelData.total >= 0.75 ? root.usageColor(modelData.used / modelData.total) : Kirigami.Theme.textColor
+                            opacity: modelData.used / modelData.total >= 0.75 ? 1 : 0.65
                         }
                     }
                     Bar { value: modelData.used / modelData.total }
@@ -239,7 +260,7 @@ PlasmoidItem {
             RowLayout {
                 visible: root.snap !== null
                 Kirigami.Icon {
-                    source: root.snap && root.snap.backup.failed.length > 0 ? "dialog-error" : "backup"
+                    source: "backup"
                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
                 }
@@ -247,7 +268,6 @@ PlasmoidItem {
                     Layout.fillWidth: true
                     opacity: 0.8
                     text: !root.snap ? ""
-                        : root.snap.backup.failed.length > 0 ? root.snap.backup.failed.length + " backup(s) failed in the last 24 h"
                         : root.snap.backup.last ? "Last backup " + root.dur(Date.now() / 1000 - root.snap.backup.last) + " ago · " + root.snap.backup.lastStatus
                         : "No backup runs found"
                 }
@@ -271,7 +291,11 @@ PlasmoidItem {
             }
 
             // the five running guests using the most memory
-            SectionLabel { text: "Busiest" }
+            RowLayout {
+                SectionLabel { text: "Busiest"; Layout.fillWidth: true }
+                SectionLabel { text: "memory"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: Kirigami.Units.gridUnit * 5 }
+                SectionLabel { text: "cpu"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: Kirigami.Units.gridUnit * 2 }
+            }
             Repeater {
                 model: root.snap ? root.snap.guests.filter(g => g.status === "running" && g.maxmem)
                                        .sort((a, b) => b.mem - a.mem).slice(0, 5) : []
@@ -286,11 +310,20 @@ PlasmoidItem {
                     }
                     Bar { value: modelData.mem / modelData.maxmem; Layout.alignment: Qt.AlignVCenter }
                     PlasmaComponents3.Label {
-                        text: root.gib(modelData.mem) + " · cpu " + root.pct(modelData.cpu)
-                        font: Kirigami.Theme.smallFont
+                        text: root.pair(modelData.mem, modelData.maxmem)
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.features: { "tnum": 1 }
                         opacity: 0.65
                         horizontalAlignment: Text.AlignRight
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                    }
+                    PlasmaComponents3.Label {
+                        text: root.pct(modelData.cpu)
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font.features: { "tnum": 1 }
+                        opacity: 0.65
+                        horizontalAlignment: Text.AlignRight
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     }
                 }
             }
@@ -300,9 +333,12 @@ PlasmoidItem {
             PlasmaComponents3.ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredHeight: guestFlow.implicitHeight
                 Layout.minimumHeight: Kirigami.Units.gridUnit * 3
                 contentWidth: availableWidth
+                QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
                 Flow {
+                    id: guestFlow
                     width: parent.width
                     spacing: Kirigami.Units.smallSpacing
                     Repeater {
@@ -349,19 +385,21 @@ PlasmoidItem {
                         : ""
                 }
                 PlasmaComponents3.ToolButton {
-                    icon.name: "search"
+                    icon.name: "search-symbolic"
                     text: "Guests"
                     PlasmaComponents3.ToolTip.text: "Guest picker (Meta+Shift+P)"
                     PlasmaComponents3.ToolTip.visible: hovered
                     onClicked: root.run("kitty --title lab -o initial_window_width=170c -o initial_window_height=42c -o remember_window_size=no pvepick")
                 }
                 PlasmaComponents3.ToolButton {
-                    icon.name: "internet-web-browser"
+                    icon.name: "internet-web-browser-symbolic"
                     text: "Proxmox"
                     onClicked: root.run("exsbe-pve web")
                 }
                 PlasmaComponents3.ToolButton {
-                    icon.name: "view-refresh"
+                    icon.name: "view-refresh-symbolic"
+                    PlasmaComponents3.ToolTip.text: "Refresh"
+                    PlasmaComponents3.ToolTip.visible: hovered
                     display: PlasmaComponents3.AbstractButton.IconOnly
                     onClicked: root.refresh()
                 }
@@ -397,7 +435,7 @@ PlasmoidItem {
             width: parent.width * Math.min(1, Math.max(0, parent.value))
             height: parent.height
             radius: parent.radius
-            color: parent.value >= root.warn ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.highlightColor
+            color: root.usageColor(parent.value)
             Behavior on width { NumberAnimation { duration: Kirigami.Units.longDuration } }
         }
     }
@@ -409,7 +447,7 @@ PlasmoidItem {
         Layout.fillWidth: true
         RowLayout {
             PlasmaComponents3.Label { text: label; font: Kirigami.Theme.smallFont; opacity: 0.55; Layout.fillWidth: true }
-            PlasmaComponents3.Label { text: root.pct(value); font: Kirigami.Theme.smallFont }
+            PlasmaComponents3.Label { text: root.pct(value); font.pointSize: Kirigami.Theme.smallFont.pointSize; font.features: { "tnum": 1 } }
         }
         Bar { value: parent.value }
     }

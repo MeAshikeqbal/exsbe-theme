@@ -45,21 +45,31 @@ PlasmoidItem {
         }
     }
 
+    function dur(sec) {
+        return sec < 90 ? "just now" : sec < 3600 ? Math.round(sec / 60) + " min" : sec < 86400 ? Math.round(sec / 3600) + " h"
+             : sec < 14 * 86400 ? Math.round(sec / 86400) + " d" : Math.round(sec / 604800) + " wk"
+    }
+    function ago(t) { const d = dur(Date.now() / 1000 - t); return d === "just now" ? d : d + " ago" }
+
+    // per group: how many run, and every container id (for start / stop all)
+    property var groups: ({})
+
     function parse(stdout) {
         const parts = stdout.split("@@PODS@@")
         let list = []
         try { list = JSON.parse(parts[0].trim() || "[]") || [] } catch (e) { error = "podman output could not be read"; return }
         error = ""
         let r = 0, s = 0, p = 0, st = 0
-        const rows = []
+        const rows = [], g = {}
         for (const c of list) {
             if (c.IsInfra) continue
             const labels = c.Labels || {}
             const isBox = labels.manager === "distrobox"
             const health = (c.Status || "").includes("(unhealthy)") ? "unhealthy"
                          : (c.Status || "").includes("(starting)") ? "starting" : ""
+            // 0 and the signals of a normal stop (SIGINT, SIGKILL, SIGTERM) are not failures
             const cleanExit = [0, 130, 137, 143].includes(c.ExitCode)
-            let state = c.State
+            const state = c.State
             const bad = health === "unhealthy" || state === "dead"
                      || (!isBox && state === "exited" && !cleanExit)
             const warming = !bad && (health === "starting" || state === "created" || state === "restarting" || state === "paused")
@@ -67,16 +77,27 @@ PlasmoidItem {
             if (bad) p++
             if (warming) st++
 
-            const ports = (c.Ports || []).map(pt => pt.host_port + "→" + pt.container_port).join("  ")
+            const name = (c.Names || ["?"])[0]
+            // the image, unless it only repeats the name; ":latest" says nothing
+            let image = (c.Image || "").replace(/^(docker\.io|localhost)\/(library\/)?/, "").replace(/:latest$/, "")
+            if (image === name || image.split("/").pop() === name) image = ""
+            const status = state === "running" ? "up " + (c.StartedAt ? dur(Date.now() / 1000 - c.StartedAt) : "") + (health ? " · " + health : "")
+                         : state === "exited" ? (cleanExit || isBox ? "stopped " : "crashed (exit " + c.ExitCode + ") ") + (c.ExitedAt > 0 ? ago(c.ExitedAt) : "")
+                         : state
+            const ports = (c.Ports || []).map(pt => pt.host_port === pt.container_port ? String(pt.host_port) : pt.host_port + "→" + pt.container_port)
+
             let group = "Containers"
             if (isBox) group = "Distrobox"
             else if (labels["com.docker.compose.project"]) group = "Compose · " + labels["com.docker.compose.project"]
             else if (c.PodName) group = "Pod · " + c.PodName
+            const gi = g[group] || (g[group] = { running: 0, total: 0, ids: [] })
+            gi.total++
+            gi.ids.push(c.Id)
+            if (state === "running") gi.running++
 
             rows.push({
-                cid: c.Id, name: (c.Names || ["?"])[0], image: (c.Image || "").replace(/^docker\.io\/(library\/)?/, ""),
-                status: c.Status || state, state: state, ports: ports, group: group, isBox: isBox,
-                bad: bad, warming: warming
+                cid: c.Id, name: name, image: image, status: status.trim(), state: state,
+                ports: [...new Set(ports)].join(","), group: group, isBox: isBox, bad: bad, warming: warming
             })
         }
         // groups alphabetically, but Distrobox last; running first inside a group
@@ -86,6 +107,7 @@ PlasmoidItem {
             if ((a.state === "running") !== (b.state === "running")) return a.state === "running" ? -1 : 1
             return a.name < b.name ? -1 : 1
         })
+        groups = g
         sync(containerModel, rows.map(x => Object.assign({ key: x.cid }, x)))
         running = r; stopped = s; problems = p; starting = st
     }
@@ -147,35 +169,40 @@ PlasmoidItem {
     }
 
     fullRepresentation: PlasmaExtras.Representation {
-        Layout.minimumWidth: Kirigami.Units.gridUnit * 24
+        Layout.minimumWidth: Kirigami.Units.gridUnit * 25
         Layout.minimumHeight: Kirigami.Units.gridUnit * 20
-        Layout.preferredHeight: Kirigami.Units.gridUnit * 28
+        Layout.preferredHeight: Kirigami.Units.gridUnit * 30
         collapseMarginsHint: true
 
         header: PlasmaExtras.PlasmoidHeading {
             RowLayout {
                 anchors.fill: parent
-                Kirigami.Heading {
-                    level: 3
-                    text: "Containers"
+                ColumnLayout {
+                    spacing: 0
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.smallSpacing
-                }
-                PlasmaComponents3.Label {
-                    text: root.running + " running · " + root.stopped + " stopped"
-                    opacity: 0.6
+                    Kirigami.Heading { level: 3; text: "Containers" }
+                    PlasmaComponents3.Label {
+                        text: root.error !== "" ? "podman unavailable"
+                            : root.running + " running · " + root.stopped + " stopped"
+                              + (root.problems > 0 ? " · " + root.problems + " need attention" : "")
+                        color: root.problems > 0 || root.error !== "" ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                        opacity: root.problems > 0 ? 1 : 0.6
+                        font: Kirigami.Theme.smallFont
+                    }
                 }
                 PlasmaComponents3.ToolButton {
-                    icon.name: "utilities-terminal"
+                    icon.name: "utilities-terminal-symbolic"
                     text: "lazydocker"
-                    display: PlasmaComponents3.AbstractButton.IconOnly
                     PlasmaComponents3.ToolTip.text: "Open lazydocker (Meta+Shift+C)"
                     PlasmaComponents3.ToolTip.visible: hovered
                     onClicked: { root.terminal("lazydocker", "lazypod"); root.expanded = false }
                 }
                 PlasmaComponents3.ToolButton {
-                    icon.name: "view-refresh"
+                    icon.name: "view-refresh-symbolic"
                     display: PlasmaComponents3.AbstractButton.IconOnly
+                    PlasmaComponents3.ToolTip.text: "Refresh"
+                    PlasmaComponents3.ToolTip.visible: hovered
                     onClicked: root.refresh()
                 }
             }
@@ -191,10 +218,41 @@ PlasmoidItem {
                 spacing: 0
                 section.property: "group"
                 section.criteria: ViewSection.FullString
-                section.delegate: Kirigami.ListSectionHeader {
+                // group heading: name · running count, and start / stop for the whole compose stack or pod
+                section.delegate: Item {
+                    id: sec
                     required property string section
+                    readonly property var info: root.groups[section] || { running: 0, total: 0, ids: [] }
+                    readonly property bool stack: section.startsWith("Compose") || section.startsWith("Pod")
                     width: ListView.view.width
-                    label: section
+                    implicitHeight: secRow.implicitHeight + Kirigami.Units.smallSpacing * 2
+                    RowLayout {
+                        id: secRow
+                        anchors.fill: parent
+                        anchors.leftMargin: Kirigami.Units.largeSpacing
+                        anchors.rightMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
+                        PlasmaComponents3.Label {
+                            text: sec.section
+                            font.weight: Font.DemiBold
+                            opacity: 0.75
+                        }
+                        PlasmaComponents3.Label {
+                            text: sec.info.running + "/" + sec.info.total + " running"
+                            font: Kirigami.Theme.smallFont
+                            opacity: 0.45
+                        }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: Qt.alpha(Kirigami.Theme.textColor, 0.12) }
+                        PlasmaComponents3.ToolButton {
+                            visible: sec.stack
+                            icon.name: sec.info.running > 0 ? "media-playback-stop-symbolic" : "media-playback-start-symbolic"
+                            display: PlasmaComponents3.AbstractButton.IconOnly
+                            PlasmaComponents3.ToolTip.text: (sec.info.running > 0 ? "Stop" : "Start") + " all " + sec.info.total
+                            PlasmaComponents3.ToolTip.visible: hovered
+                            onClicked: root.run(root.scoped("podman " + (sec.info.running > 0 ? "stop " : "start ")
+                                                            + sec.info.ids.map(root.shq).join(" ")))
+                        }
+                    }
                 }
 
                 PlasmaExtras.PlaceholderMessage {
@@ -231,46 +289,66 @@ PlasmoidItem {
                             PlasmaComponents3.Label {
                                 text: item.model.name
                                 font.weight: Font.DemiBold
+                                opacity: item.up || item.model.bad ? 1 : 0.65
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                             PlasmaComponents3.Label {
-                                text: [item.model.image, item.model.status, item.model.ports]
-                                      .filter(x => x).join("  ·  ")
+                                text: [item.model.status, item.model.image].filter(x => x).join("  ·  ")
                                 font: Kirigami.Theme.smallFont
-                                opacity: 0.65
+                                color: item.model.bad ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                                opacity: item.model.bad ? 1 : 0.55
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                         }
 
+                        // published ports, until the actions take their place on hover
+                        Repeater {
+                            model: item.hovered || !item.model.ports ? [] : item.model.ports.split(",").slice(0, 2)
+                            delegate: Rectangle {
+                                required property string modelData
+                                radius: height / 2
+                                color: Qt.alpha(Kirigami.Theme.textColor, item.up ? 0.10 : 0.05)
+                                implicitWidth: port.implicitWidth + Kirigami.Units.largeSpacing
+                                implicitHeight: port.implicitHeight + 2
+                                PlasmaComponents3.Label {
+                                    id: port
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.95
+                                    font.features: { "tnum": 1 }
+                                    opacity: item.up ? 0.85 : 0.5
+                                }
+                            }
+                        }
+
                         PlasmaComponents3.ToolButton {
                             visible: item.hovered
-                            icon.name: item.up ? "media-playback-stop" : "media-playback-start"
+                            icon.name: item.up ? "media-playback-stop-symbolic" : "media-playback-start-symbolic"
                             PlasmaComponents3.ToolTip.text: item.up ? "Stop" : "Start"
                             PlasmaComponents3.ToolTip.visible: hovered
                             onClicked: root.run(item.lifecycle(item.up ? "stop" : "start"))
                         }
                         PlasmaComponents3.ToolButton {
                             visible: item.hovered && item.up
-                            icon.name: "view-refresh"
+                            icon.name: "view-refresh-symbolic"
                             PlasmaComponents3.ToolTip.text: "Restart"
                             PlasmaComponents3.ToolTip.visible: hovered
                             onClicked: root.run(root.scoped("podman restart " + root.shq(item.model.cid)))
                         }
                         PlasmaComponents3.ToolButton {
-                            visible: item.hovered
-                            icon.name: "utilities-terminal"
+                            visible: item.hovered && (item.model.isBox || item.up)
+                            icon.name: "utilities-terminal-symbolic"
                             PlasmaComponents3.ToolTip.text: item.model.isBox ? "Enter" : "Shell"
                             PlasmaComponents3.ToolTip.visible: hovered
-                            enabled: item.model.isBox || item.up
                             onClicked: root.terminal(item.model.name, item.model.isBox
                                 ? "distrobox enter " + root.shq(item.model.name)
                                 : "podman exec -it " + root.shq(item.model.cid) + " sh")
                         }
                         PlasmaComponents3.ToolButton {
                             visible: item.hovered && !item.model.isBox
-                            icon.name: "view-list-text"
+                            icon.name: "view-list-text-symbolic"
                             PlasmaComponents3.ToolTip.text: "Logs"
                             PlasmaComponents3.ToolTip.visible: hovered
                             onClicked: root.terminal(item.model.name + " logs",

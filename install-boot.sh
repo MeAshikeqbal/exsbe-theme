@@ -13,8 +13,19 @@ plymouth() {
   local rpm
   rpm=$(ls "$HERE"/rpm/exsbe-plymouth-*.noarch.rpm | tail -1)
 
-  # 1. layer the theme package (pulls plymouth-plugin-script with it)
-  rpm -q exsbe-plymouth >/dev/null 2>&1 || rpm-ostree install "$rpm"
+  # 1. layer the theme package (pulls the script and label plugins with it); a newer build
+  #    replaces the layered one in the same transaction
+  local want have=""
+  want=$(rpm -qp --qf '%{VERSION}-%{RELEASE}' "$rpm")
+  rpm -q exsbe-plymouth >/dev/null 2>&1 && have=$(rpm -q --qf '%{VERSION}-%{RELEASE}' exsbe-plymouth)
+  if [ -z "$have" ]; then
+    rpm-ostree install "$rpm"
+  elif [ "$have" != "$want" ]; then
+    echo "exsbe-plymouth $have -> $want"
+    rpm-ostree uninstall exsbe-plymouth --install "$rpm"
+  else
+    echo "exsbe-plymouth $have is already layered"
+  fi
 
   # 2. select it (admin override file; distro defaults stay untouched)
   local conf=/etc/plymouth/plymouthd.conf
@@ -26,13 +37,14 @@ plymouth() {
   fi
 
   # 3. the theme must be inside the initramfs, so build it locally from now on
-  rpm-ostree initramfs --enable
+  rpm-ostree initramfs | grep -q 'regeneration: enabled' || rpm-ostree initramfs --enable
 }
 
 login() {
   # the greeter runs as the 'plasmalogin' user and can't read your home, so
   # shared assets go to /usr/local (writable on Bazzite) and /var/lib/exsbe
-  install -Dm644 "$HERE/wallpapers/5-midnight.png" /var/lib/exsbe/login.png
+  # the boot splash's graphite background, so boot -> login -> desktop is one continuous look
+  install -Dm644 "$HERE/plymouth/exsbe/background.png" /var/lib/exsbe/login.png
   chmod 755 /var/lib/exsbe
   install -d /usr/local/share/fonts/Inter
   install -m644 "$USER_HOME"/.local/share/fonts/Inter/*.ttf /usr/local/share/fonts/Inter/

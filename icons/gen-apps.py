@@ -25,10 +25,15 @@ APPS = {
     "folder-symbolic": (1.0, ["org.kde.dolphin", "system-file-manager", "dolphin"]),
 }
 
-# 16px symbolic glyphs drawn here: CPU / memory (no monochrome ones installed), a bold </> that
+# 16px symbolic glyphs drawn here: an outlined globe, CPU / memory (no monochrome ones installed), a bold </> that
 # replaces Breeze's hairline code-context-symbolic (dock tile + Code workspace; without an exact
 # name the lookup would fall back to "code" and pick up the VS Code tile), and a Jellyfin-style mark
 SYMBOLIC = {
+    # outlined globe in the same stroke weight as the other glyphs (WhiteSur's is a filled earth);
+    # also the Web workspace icon
+    "globe-symbolic": """<circle cx="8" cy="8" r="6.3" fill="none" stroke="#e6e6e8" stroke-width="1.5"/>
+<ellipse cx="8" cy="8" rx="2.5" ry="6.3" fill="none" stroke="#e6e6e8" stroke-width="1.3"/>
+<path d="M2.2 5.9h11.6M2.2 10.1h11.6" fill="none" stroke="#e6e6e8" stroke-width="1.3"/>""",
     "code-context-symbolic": """<path d="M5 4.2 1.4 8 5 11.8M11 4.2 14.6 8 11 11.8M9.4 2.8 6.6 13.2" fill="none" stroke="#e6e6e8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>""",
     "exsbe-jellyfin-symbolic": """<path d="M8 1.6c.5 0 .9.3 1.2.8l5.4 9.6c.5.9-.1 2-1.2 2H2.6c-1 0-1.7-1.1-1.2-2l5.4-9.6c.3-.5.7-.8 1.2-.8z" fill="none" stroke="#e6e6e8" stroke-width="1.5" stroke-linejoin="round"/>
 <path d="M8 6.2c.2 0 .4.1.5.3l2.2 3.9c.2.4 0 .8-.5.8H5.8c-.5 0-.7-.4-.5-.8l2.2-3.9c.1-.2.3-.3.5-.3z" fill="#e6e6e8"/>""",
@@ -49,8 +54,8 @@ TILE = """<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox
 <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.04"/>
 </linearGradient>
 </defs>
-<rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bg)"/>
-<rect x="4.5" y="4.5" width="55" height="55" rx="13.5" fill="none" stroke="url(#rim)"/>
+<rect x="2" y="2" width="60" height="60" rx="15" fill="url(#bg)"/>
+<rect x="2.5" y="2.5" width="59" height="59" rx="14.5" fill="none" stroke="url(#rim)"/>
 <g fill="{color}" transform="translate({tx:.3f},{ty:.3f}) scale({s:.4f})">
 {glyph}
 </g>
@@ -91,7 +96,7 @@ def glyph(path):
 def main():
     out = Path(sys.argv[1]) / "apps/scalable"
     out.mkdir(parents=True, exist_ok=True)
-    box = 34  # glyph size on the 64px tile
+    box = 35  # glyph size on the 64px tile
     for name, (scale, targets) in APPS.items():
         inner, size = glyph(find(name))
         b = box * scale

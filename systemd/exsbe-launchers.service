@@ -1,0 +1,6 @@
+[Unit]
+Description=Re-apply the Exsbe dock launchers
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/exsbe-launchers

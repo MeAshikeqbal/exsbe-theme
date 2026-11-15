@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Keep the dock's launchers on the Exsbe look. Homebrew rewrites them on every upgrade:
+#  - VS Code's launchers point at a PNG, which skips the icon theme (and the graphite Exsbe tile)
+#  - kitty's launcher should open exsbe-term (tabs per workspace)
+# Run by exsbe-launchers.path whenever one of these files changes; does nothing when they are fine.
+set -u
+apps=~/.local/share/applications
+changed=0
+for f in "$apps/code.desktop" "$apps/code-url-handler.desktop"; do
+  [ -f "$f" ] && grep -q '^Icon=/.*code\.png$' "$f" || continue
+  sed -i 's|^Icon=/.*code\.png$|Icon=code|' "$f" && changed=1 && echo "fixed icon: ${f##*/}"
+done
+f="$apps/kitty.desktop"
+if [ -f "$f" ] && grep -q '^Exec=.*kitty %U$' "$f"; then
+  sed -i "s|^Exec=.*kitty %U$|Exec=$HOME/.local/bin/exsbe-term|" "$f" && changed=1 && echo "fixed launcher: ${f##*/}"
+fi
+if [ $changed = 1 ]; then
+  rm -f ~/.cache/icon-cache.kcache
+  update-desktop-database "$apps" 2>/dev/null || true
+  kbuildsycoca6 >/dev/null 2>&1 || true
+fi

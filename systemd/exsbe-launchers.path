@@ -1,0 +1,10 @@
+[Unit]
+Description=Re-apply the Exsbe dock launchers when Homebrew rewrites them
+
+[Path]
+PathChanged=%h/.local/share/applications/code.desktop
+PathChanged=%h/.local/share/applications/code-url-handler.desktop
+PathChanged=%h/.local/share/applications/kitty.desktop
+
+[Install]
+WantedBy=default.target
